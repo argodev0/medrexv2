@@ -1,0 +1,401 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb-pharmacy-peer0
+  namespace: medrex-fabric
+  labels:
+    app: couchdb
+    org: pharmacy
+    peer: peer0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdb
+      org: pharmacy
+      peer: peer0
+  template:
+    metadata:
+      labels:
+        app: couchdb
+        org: pharmacy
+        peer: peer0
+    spec:
+      containers:
+      - name: couchdb
+        image: couchdb:3.3
+        ports:
+        - containerPort: 5984
+        env:
+        - name: COUCHDB_USER
+          value: "admin"
+        - name: COUCHDB_PASSWORD
+          value: "adminpw"
+        volumeMounts:
+        - name: couchdb-storage
+          mountPath: /opt/couchdb/data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: couchdb-storage
+        persistentVolumeClaim:
+          claimName: couchdb-pharmacy-peer0-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couchdb-pharmacy-peer0-service
+  namespace: medrex-fabric
+  labels:
+    app: couchdb
+    org: pharmacy
+    peer: peer0
+spec:
+  selector:
+    app: couchdb
+    org: pharmacy
+    peer: peer0
+  ports:
+  - port: 5984
+    targetPort: 5984
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peer0-pharmacy
+  namespace: medrex-fabric
+  labels:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fabric-peer
+      org: pharmacy
+      peer: peer0
+  template:
+    metadata:
+      labels:
+        app: fabric-peer
+        org: pharmacy
+        peer: peer0
+    spec:
+      containers:
+      - name: peer
+        image: hyperledger/fabric-peer:2.5
+        ports:
+        - containerPort: 7051
+        - containerPort: 9443
+        env:
+        - name: CORE_VM_ENDPOINT
+          value: "unix:///host/var/run/docker.sock"
+        - name: CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE
+          value: "bridge"
+        - name: FABRIC_LOGGING_SPEC
+          value: "INFO"
+        - name: CORE_PEER_TLS_ENABLED
+          value: "true"
+        - name: CORE_PEER_PROFILE_ENABLED
+          value: "false"
+        - name: CORE_PEER_TLS_CERT_FILE
+          value: "/etc/hyperledger/fabric/tls/server.crt"
+        - name: CORE_PEER_TLS_KEY_FILE
+          value: "/etc/hyperledger/fabric/tls/server.key"
+        - name: CORE_PEER_TLS_ROOTCERT_FILE
+          value: "/etc/hyperledger/fabric/tls/ca.crt"
+        - name: CORE_PEER_ID
+          value: "peer0.pharmacy.medrex.com"
+        - name: CORE_PEER_ADDRESS
+          value: "peer0.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_LISTENADDRESS
+          value: "0.0.0.0:7051"
+        - name: CORE_PEER_CHAINCODEADDRESS
+          value: "peer0.pharmacy.medrex.com:7052"
+        - name: CORE_PEER_CHAINCODELISTENADDRESS
+          value: "0.0.0.0:7052"
+        - name: CORE_PEER_GOSSIP_BOOTSTRAP
+          value: "peer1.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_GOSSIP_EXTERNALENDPOINT
+          value: "peer0.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_LOCALMSPID
+          value: "PharmacyOrgMSP"
+        - name: CORE_PEER_MSPCONFIGPATH
+          value: "/etc/hyperledger/fabric/msp"
+        - name: CORE_OPERATIONS_LISTENADDRESS
+          value: "peer0.pharmacy.medrex.com:9443"
+        - name: CORE_METRICS_PROVIDER
+          value: "prometheus"
+        - name: CHAINCODE_AS_A_SERVICE_BUILDER_CONFIG
+          value: '{"peername":"peer0pharmacy"}'
+        - name: CORE_CHAINCODE_EXECUTETIMEOUT
+          value: "300s"
+        - name: CORE_LEDGER_STATE_STATEDATABASE
+          value: "CouchDB"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS
+          value: "couchdb-pharmacy-peer0-service:5984"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME
+          value: "admin"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
+          value: "adminpw"
+        volumeMounts:
+        - name: peer-storage
+          mountPath: /var/hyperledger/production
+        - name: peer-msp
+          mountPath: /etc/hyperledger/fabric/msp
+        - name: peer-tls
+          mountPath: /etc/hyperledger/fabric/tls
+        - name: docker-socket
+          mountPath: /host/var/run/docker.sock
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: peer-storage
+        persistentVolumeClaim:
+          claimName: fabric-peer0-pharmacy-pvc
+      - name: peer-msp
+        configMap:
+          name: peer0-pharmacy-msp-config
+      - name: peer-tls
+        secret:
+          secretName: peer0-pharmacy-tls-secret
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peer0-pharmacy-service
+  namespace: medrex-fabric
+  labels:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer0
+spec:
+  selector:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer0
+  ports:
+  - name: grpc
+    port: 7051
+    targetPort: 7051
+  - name: operations
+    port: 9443
+    targetPort: 9443
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb-pharmacy-peer1
+  namespace: medrex-fabric
+  labels:
+    app: couchdb
+    org: pharmacy
+    peer: peer1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: couchdb
+      org: pharmacy
+      peer: peer1
+  template:
+    metadata:
+      labels:
+        app: couchdb
+        org: pharmacy
+        peer: peer1
+    spec:
+      containers:
+      - name: couchdb
+        image: couchdb:3.3
+        ports:
+        - containerPort: 5984
+        env:
+        - name: COUCHDB_USER
+          value: "admin"
+        - name: COUCHDB_PASSWORD
+          value: "adminpw"
+        volumeMounts:
+        - name: couchdb-storage
+          mountPath: /opt/couchdb/data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: couchdb-storage
+        persistentVolumeClaim:
+          claimName: couchdb-pharmacy-peer1-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couchdb-pharmacy-peer1-service
+  namespace: medrex-fabric
+  labels:
+    app: couchdb
+    org: pharmacy
+    peer: peer1
+spec:
+  selector:
+    app: couchdb
+    org: pharmacy
+    peer: peer1
+  ports:
+  - port: 5984
+    targetPort: 5984
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peer1-pharmacy
+  namespace: medrex-fabric
+  labels:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fabric-peer
+      org: pharmacy
+      peer: peer1
+  template:
+    metadata:
+      labels:
+        app: fabric-peer
+        org: pharmacy
+        peer: peer1
+    spec:
+      containers:
+      - name: peer
+        image: hyperledger/fabric-peer:2.5
+        ports:
+        - containerPort: 7051
+        - containerPort: 9443
+        env:
+        - name: CORE_VM_ENDPOINT
+          value: "unix:///host/var/run/docker.sock"
+        - name: CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE
+          value: "bridge"
+        - name: FABRIC_LOGGING_SPEC
+          value: "INFO"
+        - name: CORE_PEER_TLS_ENABLED
+          value: "true"
+        - name: CORE_PEER_PROFILE_ENABLED
+          value: "false"
+        - name: CORE_PEER_TLS_CERT_FILE
+          value: "/etc/hyperledger/fabric/tls/server.crt"
+        - name: CORE_PEER_TLS_KEY_FILE
+          value: "/etc/hyperledger/fabric/tls/server.key"
+        - name: CORE_PEER_TLS_ROOTCERT_FILE
+          value: "/etc/hyperledger/fabric/tls/ca.crt"
+        - name: CORE_PEER_ID
+          value: "peer1.pharmacy.medrex.com"
+        - name: CORE_PEER_ADDRESS
+          value: "peer1.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_LISTENADDRESS
+          value: "0.0.0.0:7051"
+        - name: CORE_PEER_CHAINCODEADDRESS
+          value: "peer1.pharmacy.medrex.com:7052"
+        - name: CORE_PEER_CHAINCODELISTENADDRESS
+          value: "0.0.0.0:7052"
+        - name: CORE_PEER_GOSSIP_BOOTSTRAP
+          value: "peer0.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_GOSSIP_EXTERNALENDPOINT
+          value: "peer1.pharmacy.medrex.com:7051"
+        - name: CORE_PEER_LOCALMSPID
+          value: "PharmacyOrgMSP"
+        - name: CORE_PEER_MSPCONFIGPATH
+          value: "/etc/hyperledger/fabric/msp"
+        - name: CORE_OPERATIONS_LISTENADDRESS
+          value: "peer1.pharmacy.medrex.com:9443"
+        - name: CORE_METRICS_PROVIDER
+          value: "prometheus"
+        - name: CHAINCODE_AS_A_SERVICE_BUILDER_CONFIG
+          value: '{"peername":"peer1pharmacy"}'
+        - name: CORE_CHAINCODE_EXECUTETIMEOUT
+          value: "300s"
+        - name: CORE_LEDGER_STATE_STATEDATABASE
+          value: "CouchDB"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS
+          value: "couchdb-pharmacy-peer1-service:5984"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME
+          value: "admin"
+        - name: CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD
+          value: "adminpw"
+        volumeMounts:
+        - name: peer-storage
+          mountPath: /var/hyperledger/production
+        - name: peer-msp
+          mountPath: /etc/hyperledger/fabric/msp
+        - name: peer-tls
+          mountPath: /etc/hyperledger/fabric/tls
+        - name: docker-socket
+          mountPath: /host/var/run/docker.sock
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: peer-storage
+        persistentVolumeClaim:
+          claimName: fabric-peer1-pharmacy-pvc
+      - name: peer-msp
+        configMap:
+          name: peer1-pharmacy-msp-config
+      - name: peer-tls
+        secret:
+          secretName: peer1-pharmacy-tls-secret
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: peer1-pharmacy-service
+  namespace: medrex-fabric
+  labels:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer1
+spec:
+  selector:
+    app: fabric-peer
+    org: pharmacy
+    peer: peer1
+  ports:
+  - name: grpc
+    port: 7051
+    targetPort: 7051
+  - name: operations
+    port: 9443
+    targetPort: 9443
+  type: ClusterIP

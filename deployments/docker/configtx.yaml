@@ -1,0 +1,174 @@
+# Hyperledger Fabric Configuration for Medrex DLT EMR
+# Defines organizations, orderer configuration, and channel policies
+
+Organizations:
+  - &OrdererOrg
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: crypto-config/ordererOrganizations/medrex.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+    OrdererEndpoints:
+      - orderer1.medrex.com:7050
+      - orderer2.medrex.com:8050
+      - orderer3.medrex.com:9050
+
+  - &Hospital
+    Name: HospitalMSP
+    ID: HospitalMSP
+    MSPDir: crypto-config/peerOrganizations/hospital.medrex.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('HospitalMSP.admin', 'HospitalMSP.peer', 'HospitalMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('HospitalMSP.admin', 'HospitalMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('HospitalMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('HospitalMSP.peer')"
+    AnchorPeers:
+      - Host: peer0.hospital.medrex.com
+        Port: 7051
+
+  - &Pharmacy
+    Name: PharmacyMSP
+    ID: PharmacyMSP
+    MSPDir: crypto-config/peerOrganizations/pharmacy.medrex.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('PharmacyMSP.admin', 'PharmacyMSP.peer', 'PharmacyMSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('PharmacyMSP.admin', 'PharmacyMSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('PharmacyMSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('PharmacyMSP.peer')"
+    AnchorPeers:
+      - Host: peer0.pharmacy.medrex.com
+        Port: 9051
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V2_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_0: true
+
+Application: &ApplicationDefaults
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    LifecycleEndorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  OrdererType: etcdraft
+  Addresses:
+    - orderer1.medrex.com:7050
+    - orderer2.medrex.com:8050
+    - orderer3.medrex.com:9050
+  EtcdRaft:
+    Consenters:
+      - Host: orderer1.medrex.com
+        Port: 7050
+        ClientTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer1.medrex.com/tls/server.crt
+        ServerTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer1.medrex.com/tls/server.crt
+      - Host: orderer2.medrex.com
+        Port: 8050
+        ClientTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer2.medrex.com/tls/server.crt
+        ServerTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer2.medrex.com/tls/server.crt
+      - Host: orderer3.medrex.com
+        Port: 9050
+        ClientTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer3.medrex.com/tls/server.crt
+        ServerTLSCert: crypto-config/ordererOrganizations/medrex.com/orderers/orderer3.medrex.com/tls/server.crt
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 99 MB
+    PreferredMaxBytes: 512 KB
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+  Capabilities:
+    <<: *OrdererCapabilities
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  MedrexOrdererGenesis:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+      Organizations:
+        - *OrdererOrg
+      Capabilities: *OrdererCapabilities
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - <<: *Hospital
+        - <<: *Pharmacy
+      Capabilities: *ApplicationCapabilities
+
+  HealthcareChannel:
+    Consortium: SampleConsortium
+    <<: *ChannelDefaults
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - <<: *Hospital
+        - <<: *Pharmacy
+      Capabilities: *ApplicationCapabilities

@@ -1,0 +1,378 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgresql-pv
+  labels:
+    type: local
+    app: postgresql
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/postgresql"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-pvc
+  namespace: medrex-data
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-orderer0-pv
+  labels:
+    type: local
+    app: fabric-orderer
+    node: orderer0
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/orderer0"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-orderer0-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-orderer1-pv
+  labels:
+    type: local
+    app: fabric-orderer
+    node: orderer1
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/orderer1"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-orderer1-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-orderer2-pv
+  labels:
+    type: local
+    app: fabric-orderer
+    node: orderer2
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/orderer2"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-orderer2-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-peer0-hospital-pv
+  labels:
+    type: local
+    app: fabric-peer
+    org: hospital
+    peer: peer0
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/peer0-hospital"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-peer0-hospital-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-peer1-hospital-pv
+  labels:
+    type: local
+    app: fabric-peer
+    org: hospital
+    peer: peer1
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/peer1-hospital"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-peer1-hospital-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-peer0-pharmacy-pv
+  labels:
+    type: local
+    app: fabric-peer
+    org: pharmacy
+    peer: peer0
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/peer0-pharmacy"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-peer0-pharmacy-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-peer1-pharmacy-pv
+  labels:
+    type: local
+    app: fabric-peer
+    org: pharmacy
+    peer: peer1
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/fabric/peer1-pharmacy"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-peer1-pharmacy-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: couchdb-hospital-peer0-pv
+  labels:
+    type: local
+    app: couchdb
+    org: hospital
+    peer: peer0
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 30Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/couchdb/hospital-peer0"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: couchdb-hospital-peer0-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: couchdb-hospital-peer1-pv
+  labels:
+    type: local
+    app: couchdb
+    org: hospital
+    peer: peer1
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 30Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/couchdb/hospital-peer1"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: couchdb-hospital-peer1-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: couchdb-pharmacy-peer0-pv
+  labels:
+    type: local
+    app: couchdb
+    org: pharmacy
+    peer: peer0
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 30Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/couchdb/pharmacy-peer0"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: couchdb-pharmacy-peer0-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: couchdb-pharmacy-peer1-pv
+  labels:
+    type: local
+    app: couchdb
+    org: pharmacy
+    peer: peer1
+spec:
+  storageClassName: fast-ssd
+  capacity:
+    storage: 30Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/data/couchdb/pharmacy-peer1"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: couchdb-pharmacy-peer1-pvc
+  namespace: medrex-fabric
+spec:
+  storageClassName: fast-ssd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi

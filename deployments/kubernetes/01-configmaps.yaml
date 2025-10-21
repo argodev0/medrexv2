@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medrex-config
+  namespace: medrex-services
+data:
+  database_host: "postgresql-service.medrex-data.svc.cluster.local"
+  database_port: "5432"
+  database_name: "medrex_emr"
+  fabric_network_config: |
+    {
+      "name": "medrex-network",
+      "version": "1.0.0",
+      "client": {
+        "organization": "HospitalOrg",
+        "connection": {
+          "timeout": {
+            "peer": {
+              "endorser": "300"
+            }
+          }
+        }
+      },
+      "organizations": {
+        "HospitalOrg": {
+          "mspid": "HospitalOrgMSP",
+          "peers": [
+            "peer0.hospital.medrex.com",
+            "peer1.hospital.medrex.com"
+          ],
+          "certificateAuthorities": [
+            "ca.hospital.medrex.com"
+          ]
+        },
+        "PharmacyOrg": {
+          "mspid": "PharmacyOrgMSP",
+          "peers": [
+            "peer0.pharmacy.medrex.com",
+            "peer1.pharmacy.medrex.com"
+          ],
+          "certificateAuthorities": [
+            "ca.pharmacy.medrex.com"
+          ]
+        }
+      },
+      "orderers": {
+        "orderer0.medrex.com": {
+          "url": "grpcs://orderer0-service.medrex-fabric.svc.cluster.local:7050"
+        },
+        "orderer1.medrex.com": {
+          "url": "grpcs://orderer1-service.medrex-fabric.svc.cluster.local:7050"
+        },
+        "orderer2.medrex.com": {
+          "url": "grpcs://orderer2-service.medrex-fabric.svc.cluster.local:7050"
+        }
+      },
+      "peers": {
+        "peer0.hospital.medrex.com": {
+          "url": "grpcs://peer0-hospital-service.medrex-fabric.svc.cluster.local:7051"
+        },
+        "peer1.hospital.medrex.com": {
+          "url": "grpcs://peer1-hospital-service.medrex-fabric.svc.cluster.local:7051"
+        },
+        "peer0.pharmacy.medrex.com": {
+          "url": "grpcs://peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051"
+        },
+        "peer1.pharmacy.medrex.com": {
+          "url": "grpcs://peer1-pharmacy-service.medrex-fabric.svc.cluster.local:7051"
+        }
+      },
+      "certificateAuthorities": {
+        "ca.hospital.medrex.com": {
+          "url": "https://ca-hospital-service.medrex-fabric.svc.cluster.local:7054"
+        },
+        "ca.pharmacy.medrex.com": {
+          "url": "https://ca-pharmacy-service.medrex-fabric.svc.cluster.local:7054"
+        }
+      }
+    }
+  jwt_secret_key: "your-jwt-secret-key-change-in-production"
+  log_level: "info"
+  environment: "production"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fabric-config
+  namespace: medrex-fabric
+data:
+  FABRIC_LOGGING_SPEC: "INFO"
+  CORE_VM_ENDPOINT: "unix:///host/var/run/docker.sock"
+  CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE: "bridge"
+  FABRIC_CFG_PATH: "/etc/hyperledger/fabric"

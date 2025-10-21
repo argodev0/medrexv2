@@ -1,0 +1,204 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Medrex DLT EMR System Overview",
+    "tags": ["medrex", "healthcare", "blockchain"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{service}} - {{method}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Requests/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "HTTP Response Times",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile - {{service}}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "50th percentile - {{service}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Seconds", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status_code=~\"4..|5..\"}[5m])",
+            "legendFormat": "{{service}} - {{status_code}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Errors/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Authentication Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(auth_attempts_total{status=\"success\"}[5m])",
+            "legendFormat": "Successful logins"
+          },
+          {
+            "expr": "rate(auth_attempts_total{status=\"failed\"}[5m])",
+            "legendFormat": "Failed logins"
+          }
+        ],
+        "yAxes": [
+          {"label": "Attempts/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "PHI Access Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(phi_access_total{status=\"granted\"}[5m])",
+            "legendFormat": "Granted - {{user_role}}"
+          },
+          {
+            "expr": "rate(phi_access_total{status=\"denied\"}[5m])",
+            "legendFormat": "Denied - {{user_role}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Access/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Database Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "db_connections_active",
+            "legendFormat": "Active connections - {{service}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile query time - {{service}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Blockchain Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(blockchain_transactions_total{status=\"success\"}[5m])",
+            "legendFormat": "Successful transactions - {{chaincode}}"
+          },
+          {
+            "expr": "rate(blockchain_transactions_total{status=\"failed\"}[5m])",
+            "legendFormat": "Failed transactions - {{chaincode}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Transactions/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 9,
+        "title": "Audit Events",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(audit_events_total[5m])",
+            "legendFormat": "{{event_type}} - {{success}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Events/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 10,
+        "title": "Compliance Violations",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "increase(compliance_violations_total[1h])",
+            "legendFormat": "{{violation_type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

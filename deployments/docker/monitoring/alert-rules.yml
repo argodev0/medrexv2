@@ -1,0 +1,217 @@
+groups:
+  - name: medrex-system-alerts
+    rules:
+      # High error rate alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status_code=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "High error rate detected in {{ $labels.service }}"
+          description: "Service {{ $labels.service }} has error rate of {{ $value }} errors per second"
+
+      # Authentication failure alerts
+      - alert: HighAuthFailureRate
+        expr: rate(auth_attempts_total{status="failed"}[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High authentication failure rate in {{ $labels.service }}"
+          description: "Service {{ $labels.service }} has {{ $value }} authentication failures per second"
+
+      # PHI access violations
+      - alert: PHIAccessViolation
+        expr: increase(phi_access_total{status="denied"}[1m]) > 5
+        for: 0s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Multiple PHI access violations detected"
+          description: "{{ $value }} PHI access attempts were denied in the last minute"
+
+      # Database connection issues
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: db_connections_active / 100 > 0.9
+        for: 2m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Database connection pool is {{ $value }}% full"
+
+      # Blockchain transaction failures
+      - alert: BlockchainTransactionFailures
+        expr: rate(blockchain_transactions_total{status="failed"}[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          category: blockchain
+        annotations:
+          summary: "Blockchain transaction failures detected"
+          description: "{{ $value }} blockchain transactions per second are failing"
+
+      # High response time alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High response time in {{ $labels.service }}"
+          description: "95th percentile response time is {{ $value }}s"
+
+      # Service down alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute"
+
+      # Compliance violation alerts
+      - alert: ComplianceViolation
+        expr: increase(compliance_violations_total[1m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          category: compliance
+        annotations:
+          summary: "Compliance violation detected"
+          description: "{{ $value }} compliance violations of type {{ $labels.violation_type }} detected"
+
+      # Audit log failures
+      - alert: AuditLogFailures
+        expr: rate(audit_events_total{success="false"}[5m]) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+          category: compliance
+        annotations:
+          summary: "Audit log failures detected"
+          description: "{{ $value }} audit events per second are failing to be recorded"
+
+      # System error rate
+      - alert: HighSystemErrorRate
+        expr: rate(system_errors_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High system error rate in {{ $labels.service }}"
+          description: "Service {{ $labels.service }} has {{ $value }} system errors per second"
+
+  - name: medrex-performance-alerts
+    rules:
+      # Memory usage alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}%"
+
+      # CPU usage alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}%"
+
+      # Disk usage alerts
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes - node_filesystem_avail_bytes) / node_filesystem_size_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }}"
+
+  - name: medrex-security-alerts
+    rules:
+      # Suspicious login patterns
+      - alert: SuspiciousLoginPattern
+        expr: rate(auth_attempts_total{status="failed"}[1m]) > 0.1
+        for: 30s
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Suspicious login pattern detected"
+          description: "{{ $value }} failed login attempts per second detected"
+
+      # Unauthorized access attempts
+      - alert: UnauthorizedAccessAttempts
+        expr: increase(http_requests_total{status_code="403"}[1m]) > 10
+        for: 0s
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Multiple unauthorized access attempts"
+          description: "{{ $value }} unauthorized access attempts in the last minute"
+
+      # Certificate expiration warnings
+      - alert: CertificateExpiringSoon
+        expr: (x509_cert_expiry - time()) / 86400 < 30
+        for: 0s
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Certificate expiring soon"
+          description: "Certificate {{ $labels.subject }} expires in {{ $value }} days"
+
+  - name: medrex-blockchain-alerts
+    rules:
+      # Fabric peer down
+      - alert: FabricPeerDown
+        expr: up{job=~"fabric-peer-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: blockchain
+        annotations:
+          summary: "Hyperledger Fabric peer is down"
+          description: "Fabric peer {{ $labels.job }} has been down for more than 1 minute"
+
+      # Chaincode invocation failures
+      - alert: ChaincodeInvocationFailures
+        expr: rate(blockchain_transactions_total{status="failed"}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          category: blockchain
+        annotations:
+          summary: "High chaincode invocation failure rate"
+          description: "{{ $value }} chaincode invocations per second are failing"
+
+      # Block production issues
+      - alert: SlowBlockProduction
+        expr: increase(fabric_blocks_total[5m]) < 1
+        for: 5m
+        labels:
+          severity: warning
+          category: blockchain
+        annotations:
+          summary: "Slow block production detected"
+          description: "Less than 1 block produced in the last 5 minutes"

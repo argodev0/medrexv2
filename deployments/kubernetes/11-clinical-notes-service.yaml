@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clinical-notes-service
+  namespace: medrex-services
+  labels:
+    app: clinical-notes-service
+    component: microservice
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: clinical-notes-service
+  template:
+    metadata:
+      labels:
+        app: clinical-notes-service
+    spec:
+      containers:
+      - name: clinical-notes-service
+        image: medrex/clinical-notes-service:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 8081
+        env:
+        - name: PORT
+          value: "8080"
+        - name: METRICS_PORT
+          value: "8081"
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_host
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_port
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_name
+        - name: DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_username
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_password
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: encryption_key
+        - name: HSM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: hsm_api_key
+        - name: FABRIC_NETWORK_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: fabric_network_config
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: log_level
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: environment
+        volumeMounts:
+        - name: fabric-crypto
+          mountPath: /etc/hyperledger/fabric
+          readOnly: true
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: fabric-crypto
+        secret:
+          secretName: fabric-crypto-material
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clinical-notes-service
+  namespace: medrex-services
+  labels:
+    app: clinical-notes-service
+spec:
+  selector:
+    app: clinical-notes-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: clinical-notes-service-hpa
+  namespace: medrex-services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: clinical-notes-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

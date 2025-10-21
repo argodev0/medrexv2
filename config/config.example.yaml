@@ -1,0 +1,83 @@
+# Medrex DLT EMR Configuration Example
+# Copy this file to config.yaml and update with your values
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30
+  write_timeout: 30
+  idle_timeout: 120
+  tls_enabled: false
+  cert_file: ""
+  key_file: ""
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "medrex"
+  user: "medrex"
+  password: "your_db_password"
+  ssl_mode: "require"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300
+  encryption_key: "your_32_byte_encryption_key_here"
+
+fabric:
+  network_config: "./fabric-config/network.yaml"
+  user_name: "admin"
+  user_password: "adminpw"
+  org_name: "HospitalOrg"
+  channel_name: "healthcare"
+  chaincode_id: "medrex"
+  ca_endpoint: "https://ca.hospital.medrex.com:7054"
+  peer_endpoints:
+    - "grpc://peer0.hospital.medrex.com:7051"
+    - "grpc://peer1.hospital.medrex.com:7051"
+  orderer_endpoint: "grpc://orderer.medrex.com:7050"
+  tls_enabled: true
+  cert_path: "./fabric-config/crypto/peerOrganizations/hospital.medrex.com"
+  key_path: "./fabric-config/crypto/peerOrganizations/hospital.medrex.com"
+  msp_config_path: "./fabric-config/crypto/peerOrganizations/hospital.medrex.com/msp"
+  chaincodes:
+    access_policy: "accesspolicy"
+    audit_log: "auditlog"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+
+jwt:
+  secret_key: "your_jwt_secret_key_here"
+  access_token_ttl: 3600    # 1 hour
+  refresh_token_ttl: 86400  # 24 hours
+  issuer: "medrex-dlt-emr"
+  audience: "medrex-users"
+
+encryption:
+  aes_key: "your_32_byte_aes_key_for_phi_encryption"
+  hsm:
+    enabled: false
+    provider: "azure"
+    endpoint: "https://your-keyvault.vault.azure.net/"
+    key_vault: "medrex-keyvault"
+    client_id: "your_azure_client_id"
+    client_secret: "your_azure_client_secret"
+    tenant_id: "your_azure_tenant_id"
+
+rate_limit:
+  enabled: true
+  requests_per_min: 100
+  burst_size: 10
+  cleanup_interval: 60
+
+monitoring:
+  enabled: true
+  metrics_path: "/metrics"
+  prometheus_port: 9090
+  health_path: "/health"
+
+log_level: "info"

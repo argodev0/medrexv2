@@ -1,0 +1,99 @@
+# Prometheus configuration for Medrex DLT EMR development environment
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert-rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # IAM Service
+  - job_name: 'iam-service'
+    static_configs:
+      - targets: ['iam-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Clinical Notes Service
+  - job_name: 'clinical-notes-service'
+    static_configs:
+      - targets: ['clinical-notes-service:8081']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Scheduling Service
+  - job_name: 'scheduling-service'
+    static_configs:
+      - targets: ['scheduling-service:8082']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Mobile Workflow Service
+  - job_name: 'mobile-workflow-service'
+    static_configs:
+      - targets: ['mobile-workflow-service:8083']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # PostgreSQL Exporter (if added)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis Exporter (if added)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # Node Exporter (if added)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Hyperledger Fabric Peers
+  - job_name: 'fabric-peer-hospital'
+    static_configs:
+      - targets: ['peer-hospital:9443']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'fabric-peer-pharmacy'
+    static_configs:
+      - targets: ['peer-pharmacy:9443']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # CouchDB instances
+  - job_name: 'couchdb-hospital'
+    static_configs:
+      - targets: ['couchdb-hospital:5984']
+    metrics_path: '/_node/_local/_prometheus'
+    scrape_interval: 30s
+
+  - job_name: 'couchdb-pharmacy'
+    static_configs:
+      - targets: ['couchdb-pharmacy:5984']
+    metrics_path: '/_node/_local/_prometheus'
+    scrape_interval: 30s

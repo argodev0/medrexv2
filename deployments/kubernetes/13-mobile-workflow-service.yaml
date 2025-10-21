@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-workflow-service
+  namespace: medrex-services
+  labels:
+    app: mobile-workflow-service
+    component: microservice
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mobile-workflow-service
+  template:
+    metadata:
+      labels:
+        app: mobile-workflow-service
+    spec:
+      containers:
+      - name: mobile-workflow-service
+        image: medrex/mobile-workflow-service:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 8081
+        env:
+        - name: PORT
+          value: "8080"
+        - name: METRICS_PORT
+          value: "8081"
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_host
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_port
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_name
+        - name: DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_username
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_password
+        - name: FABRIC_NETWORK_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: fabric_network_config
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: log_level
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: environment
+        - name: CLINICAL_NOTES_SERVICE_URL
+          value: "http://clinical-notes-service:8080"
+        - name: IAM_SERVICE_URL
+          value: "http://iam-service:8080"
+        volumeMounts:
+        - name: fabric-crypto
+          mountPath: /etc/hyperledger/fabric
+          readOnly: true
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: fabric-crypto
+        secret:
+          secretName: fabric-crypto-material
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-workflow-service
+  namespace: medrex-services
+  labels:
+    app: mobile-workflow-service
+spec:
+  selector:
+    app: mobile-workflow-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mobile-workflow-service-hpa
+  namespace: medrex-services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mobile-workflow-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

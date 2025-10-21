@@ -1,0 +1,136 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/medrex/dlt-emr/internal/iam"
+	"github.com/medrex/dlt-emr/pkg/config"
+	"github.com/medrex/dlt-emr/pkg/database"
+	"github.com/medrex/dlt-emr/pkg/logger"
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize logger
+	log := logger.New(cfg.LogLevel)
+	log.Info("Starting IAM Service", "version", "1.0.0")
+
+	// Initialize database connection
+	db, err := database.New(cfg.Database, log)
+	if err != nil {
+		log.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Create database schema
+	ctx := context.Background()
+	if err := db.CreateSchema(ctx); err != nil {
+		log.Error("Failed to create database schema", "error", err)
+		os.Exit(1)
+	}
+
+	// Initialize IAM components
+	passwordManager := iam.NewPasswordManager()
+	mfaProvider := iam.NewMFAProvider(log, cfg.JWT.Issuer)
+	certManager := iam.NewCertificateManager(&cfg.Fabric, log)
+	userRepo := iam.NewUserRepository(db, log)
+
+	// Initialize IAM service
+	iamService := iam.NewService(
+		cfg,
+		log,
+		userRepo,
+		certManager,
+		mfaProvider,
+		passwordManager,
+	)
+
+	// Initialize HTTP handlers
+	handlers := iam.NewHandlers(iamService, log)
+
+	// Setup Gin router
+	if cfg.LogLevel != "debug" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+
+	// Add CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
+
+	// Health check endpoint
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"service":   "iam-service",
+			"timestamp": time.Now().UTC(),
+		})
+	})
+
+	// Register IAM routes
+	handlers.RegisterRoutes(router)
+
+	// Setup HTTP server
+	server := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		Handler:      router,
+		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.Server.IdleTimeout) * time.Second,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Info("Starting HTTP server", "address", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("Failed to start HTTP server", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("Shutting down IAM Service...")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("IAM Service stopped")
+}

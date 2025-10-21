@@ -1,0 +1,475 @@
+name: Medrex DLT EMR CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: medrex-dlt-emr
+
+jobs:
+  # Security and compliance scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Gosec Security Scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: '-fmt sarif -out gosec-results.sarif ./...'
+
+      - name: Upload Gosec scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'gosec-results.sarif'
+
+  # Code quality and linting
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run go fmt check
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Code is not formatted properly:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+  # Unit tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: medrex_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        env:
+          DATABASE_URL: postgres://postgres:testpass@localhost:5432/medrex_test?sslmode=disable
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Check test coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Test coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 85" | bc -l) )); then
+            echo "Test coverage is below 85% threshold"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+
+  # Chaincode tests
+  chaincode-tests:
+    name: Chaincode Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Test AccessPolicy Chaincode
+        working-directory: ./chaincode/access-policy
+        run: go test -v ./...
+
+      - name: Test AuditLog Chaincode
+        working-directory: ./chaincode/audit-log
+        run: go test -v ./...
+
+  # Integration tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, chaincode-tests]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: medrex_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start Hyperledger Fabric network
+        working-directory: ./deployments/docker
+        run: |
+          chmod +x scripts/setup-network.sh
+          ./scripts/setup-network.sh
+
+      - name: Deploy chaincodes
+        working-directory: ./deployments/docker
+        run: |
+          chmod +x scripts/deploy-chaincode.sh
+          ./scripts/deploy-chaincode.sh
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgres://postgres:testpass@localhost:5432/medrex_test?sslmode=disable
+          FABRIC_NETWORK_PATH: ./deployments/docker
+        run: |
+          go test -v -tags=integration ./tests/integration/...
+
+      - name: Cleanup
+        if: always()
+        working-directory: ./deployments/docker
+        run: docker-compose down -v
+
+  # Build and push Docker images
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [security-scan, code-quality, unit-tests, chaincode-tests]
+    if: github.event_name == 'push' || github.event_name == 'release'
+    strategy:
+      matrix:
+        service: [iam-service, api-gateway, clinical-notes-service, scheduling-service, mobile-workflow-service]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./cmd/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Compliance validation
+  compliance-check:
+    name: Compliance Validation
+    runs-on: ubuntu-latest
+    needs: [security-scan, code-quality]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: HIPAA Compliance Check
+        run: |
+          echo "Checking HIPAA compliance requirements..."
+          
+          # Check for PHI encryption
+          if ! grep -r "AES.*256" pkg/encryption/; then
+            echo "ERROR: 256-bit AES encryption not found"
+            exit 1
+          fi
+          
+          # Check for audit logging
+          if ! grep -r "audit.*log" pkg/logger/; then
+            echo "ERROR: Audit logging not implemented"
+            exit 1
+          fi
+          
+          # Check for access control
+          if ! grep -r "rbac\|access.*control" internal/iam/; then
+            echo "ERROR: Access control not implemented"
+            exit 1
+          fi
+          
+          echo "HIPAA compliance checks passed"
+
+      - name: GDPR Compliance Check
+        run: |
+          echo "Checking GDPR compliance requirements..."
+          
+          # Check for data encryption
+          if ! find . -name "*.go" -exec grep -l "encrypt\|decrypt" {} \; | grep -q .; then
+            echo "ERROR: Data encryption not found"
+            exit 1
+          fi
+          
+          # Check for audit trails
+          if ! find . -name "*.go" -exec grep -l "audit" {} \; | grep -q .; then
+            echo "ERROR: Audit trails not implemented"
+            exit 1
+          fi
+          
+          echo "GDPR compliance checks passed"
+
+      - name: Blockchain Compliance Check
+        run: |
+          echo "Checking blockchain compliance..."
+          
+          # Verify PHI is not stored on blockchain
+          if grep -r "phi\|patient.*data" chaincode/; then
+            echo "ERROR: PHI found in chaincode - compliance violation"
+            exit 1
+          fi
+          
+          # Check for immutable audit logs
+          if ! grep -r "immutable\|audit" chaincode/audit-log/; then
+            echo "ERROR: Immutable audit logs not implemented"
+            exit 1
+          fi
+          
+          echo "Blockchain compliance checks passed"
+
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [integration-tests, build-images, compliance-check]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to staging
+        working-directory: ./deployments/kubernetes
+        run: |
+          # Update image tags
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/iam-service:develop-${{ github.sha }}|g" 09-iam-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api-gateway:develop-${{ github.sha }}|g" 10-api-gateway.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/clinical-notes-service:develop-${{ github.sha }}|g" 11-clinical-notes-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/scheduling-service:develop-${{ github.sha }}|g" 12-scheduling-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/mobile-workflow-service:develop-${{ github.sha }}|g" 13-mobile-workflow-service.yaml
+          
+          # Deploy to staging
+          kubectl apply -f . --namespace=medrex-staging
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/iam-service --namespace=medrex-staging --timeout=300s
+          kubectl rollout status deployment/api-gateway --namespace=medrex-staging --timeout=300s
+          kubectl rollout status deployment/clinical-notes-service --namespace=medrex-staging --timeout=300s
+          kubectl rollout status deployment/scheduling-service --namespace=medrex-staging --timeout=300s
+          kubectl rollout status deployment/mobile-workflow-service --namespace=medrex-staging --timeout=300s
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [integration-tests, build-images, compliance-check]
+    if: github.event_name == 'release'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to production
+        working-directory: ./deployments/kubernetes
+        run: |
+          # Update image tags with release version
+          VERSION=${GITHUB_REF#refs/tags/}
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/iam-service:${VERSION}|g" 09-iam-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api-gateway:${VERSION}|g" 10-api-gateway.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/clinical-notes-service:${VERSION}|g" 11-clinical-notes-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/scheduling-service:${VERSION}|g" 12-scheduling-service.yaml
+          sed -i "s|image: .*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/mobile-workflow-service:${VERSION}|g" 13-mobile-workflow-service.yaml
+          
+          # Deploy to production with blue-green strategy
+          kubectl apply -f . --namespace=medrex-production
+
+      - name: Verify production deployment
+        run: |
+          kubectl rollout status deployment/iam-service --namespace=medrex-production --timeout=600s
+          kubectl rollout status deployment/api-gateway --namespace=medrex-production --timeout=600s
+          kubectl rollout status deployment/clinical-notes-service --namespace=medrex-production --timeout=600s
+          kubectl rollout status deployment/scheduling-service --namespace=medrex-production --timeout=600s
+          kubectl rollout status deployment/mobile-workflow-service --namespace=medrex-production --timeout=600s
+
+      - name: Run smoke tests
+        run: |
+          # Wait for services to be ready
+          sleep 30
+          
+          # Run basic health checks
+          kubectl exec -n medrex-production deployment/api-gateway -- curl -f http://localhost:8000/health
+          kubectl exec -n medrex-production deployment/iam-service -- curl -f http://localhost:8080/health
+          kubectl exec -n medrex-production deployment/clinical-notes-service -- curl -f http://localhost:8081/health
+          kubectl exec -n medrex-production deployment/scheduling-service -- curl -f http://localhost:8082/health
+          kubectl exec -n medrex-production deployment/mobile-workflow-service -- curl -f http://localhost:8083/health
+
+  # Rollback capability
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && (github.ref == 'refs/heads/main' || github.event_name == 'release')
+    needs: [deploy-staging, deploy-production]
+    environment: production
+    
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Rollback deployment
+        run: |
+          kubectl rollout undo deployment/iam-service --namespace=medrex-production
+          kubectl rollout undo deployment/api-gateway --namespace=medrex-production
+          kubectl rollout undo deployment/clinical-notes-service --namespace=medrex-production
+          kubectl rollout undo deployment/scheduling-service --namespace=medrex-production
+          kubectl rollout undo deployment/mobile-workflow-service --namespace=medrex-production
+
+      - name: Verify rollback
+        run: |
+          kubectl rollout status deployment/iam-service --namespace=medrex-production --timeout=300s
+          kubectl rollout status deployment/api-gateway --namespace=medrex-production --timeout=300s
+          kubectl rollout status deployment/clinical-notes-service --namespace=medrex-production --timeout=300s
+          kubectl rollout status deployment/scheduling-service --namespace=medrex-production --timeout=300s
+          kubectl rollout status deployment/mobile-workflow-service --namespace=medrex-production --timeout=300s

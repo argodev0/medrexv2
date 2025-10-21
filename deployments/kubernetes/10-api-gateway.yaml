@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: medrex-services
+  labels:
+    app: api-gateway
+    component: gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: medrex/api-gateway:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 8081
+        env:
+        - name: PORT
+          value: "8080"
+        - name: METRICS_PORT
+          value: "8081"
+        - name: IAM_SERVICE_URL
+          value: "http://iam-service:8080"
+        - name: CLINICAL_NOTES_SERVICE_URL
+          value: "http://clinical-notes-service:8080"
+        - name: SCHEDULING_SERVICE_URL
+          value: "http://scheduling-service:8080"
+        - name: MOBILE_WORKFLOW_SERVICE_URL
+          value: "http://mobile-workflow-service:8080"
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: jwt_secret_key
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: log_level
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: environment
+        - name: RATE_LIMIT_REQUESTS_PER_MINUTE
+          value: "1000"
+        - name: RATE_LIMIT_BURST_SIZE
+          value: "100"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: medrex-services
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: medrex-services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 3
+  maxReplicas: 15
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

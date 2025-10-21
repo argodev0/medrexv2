@@ -1,0 +1,481 @@
+# Medrex DLT EMR - Complete Development Environment
+# This Docker Compose file sets up the entire development stack including:
+# - PostgreSQL database with encryption
+# - Hyperledger Fabric network (simplified for development)
+# - All microservices
+# - Monitoring and development tools
+
+version: '3.8'
+
+networks:
+  medrex-dev:
+    name: medrex-dev
+    driver: bridge
+
+volumes:
+  postgres_data:
+  fabric_orderer:
+  fabric_peer_hospital:
+  fabric_peer_pharmacy:
+  fabric_ca_hospital:
+  fabric_ca_pharmacy:
+  couchdb_hospital:
+  couchdb_pharmacy:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # PostgreSQL Database with encryption
+  postgres:
+    image: postgres:15-alpine
+    container_name: medrex-postgres
+    environment:
+      POSTGRES_DB: medrex_emr
+      POSTGRES_USER: medrex_user
+      POSTGRES_PASSWORD: medrex_dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - medrex-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medrex_user -d medrex_emr"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: medrex-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - medrex-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Hyperledger Fabric CA for Hospital Organization
+  ca-hospital:
+    image: hyperledger/fabric-ca:1.5.7
+    container_name: ca-hospital
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca-hospital
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_PORT=7054
+    ports:
+      - "7054:7054"
+    command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
+    volumes:
+      - fabric_ca_hospital:/etc/hyperledger/fabric-ca-server
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Hyperledger Fabric CA for Pharmacy Organization
+  ca-pharmacy:
+    image: hyperledger/fabric-ca:1.5.7
+    container_name: ca-pharmacy
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      - FABRIC_CA_SERVER_CA_NAME=ca-pharmacy
+      - FABRIC_CA_SERVER_TLS_ENABLED=true
+      - FABRIC_CA_SERVER_PORT=8054
+    ports:
+      - "8054:8054"
+    command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
+    volumes:
+      - fabric_ca_pharmacy:/etc/hyperledger/fabric-ca-server
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Hyperledger Fabric Orderer (single node for development)
+  orderer:
+    image: hyperledger/fabric-orderer:2.5.4
+    container_name: orderer
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=false
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:7053
+    working_dir: /root
+    command: orderer
+    volumes:
+      - fabric_orderer:/var/hyperledger/production/orderer
+    ports:
+      - "7050:7050"
+      - "7053:7053"
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # CouchDB for Hospital Peer
+  couchdb-hospital:
+    image: couchdb:3.3.2
+    container_name: couchdb-hospital
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb_hospital:/opt/couchdb/data
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # CouchDB for Pharmacy Peer
+  couchdb-pharmacy:
+    image: couchdb:3.3.2
+    container_name: couchdb-pharmacy
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "6984:5984"
+    volumes:
+      - couchdb_pharmacy:/opt/couchdb/data
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Hospital Peer
+  peer-hospital:
+    image: hyperledger/fabric-peer:2.5.4
+    container_name: peer-hospital
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_PEER_ID=peer-hospital
+      - CORE_PEER_ADDRESS=peer-hospital:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_CHAINCODEADDRESS=peer-hospital:7052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+      - CORE_PEER_LOCALMSPID=HospitalMSP
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb-hospital:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    volumes:
+      - fabric_peer_hospital:/var/hyperledger/production
+      - /var/run/docker.sock:/host/var/run/docker.sock
+    working_dir: /root
+    command: peer node start
+    ports:
+      - "7051:7051"
+    depends_on:
+      - couchdb-hospital
+      - orderer
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Pharmacy Peer
+  peer-pharmacy:
+    image: hyperledger/fabric-peer:2.5.4
+    container_name: peer-pharmacy
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_PEER_ID=peer-pharmacy
+      - CORE_PEER_ADDRESS=peer-pharmacy:8051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
+      - CORE_PEER_CHAINCODEADDRESS=peer-pharmacy:8052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:8052
+      - CORE_PEER_LOCALMSPID=PharmacyMSP
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb-pharmacy:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    volumes:
+      - fabric_peer_pharmacy:/var/hyperledger/production
+      - /var/run/docker.sock:/host/var/run/docker.sock
+    working_dir: /root
+    command: peer node start
+    ports:
+      - "8051:8051"
+    depends_on:
+      - couchdb-pharmacy
+      - orderer
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # IAM Service
+  iam-service:
+    build:
+      context: ../../
+      dockerfile: cmd/iam-service/Dockerfile
+    container_name: iam-service
+    environment:
+      - PORT=8080
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=medrex_emr
+      - DATABASE_USERNAME=medrex_user
+      - DATABASE_PASSWORD=medrex_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - FABRIC_NETWORK_CONFIG_PATH=/app/config/fabric-network.yaml
+      - LOG_LEVEL=debug
+      - ENVIRONMENT=development
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - redis
+      - peer-hospital
+      - peer-pharmacy
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../../
+      dockerfile: cmd/api-gateway/Dockerfile
+    container_name: api-gateway
+    environment:
+      - PORT=8000
+      - IAM_SERVICE_URL=http://iam-service:8080
+      - CLINICAL_NOTES_SERVICE_URL=http://clinical-notes-service:8081
+      - SCHEDULING_SERVICE_URL=http://scheduling-service:8082
+      - MOBILE_WORKFLOW_SERVICE_URL=http://mobile-workflow-service:8083
+      - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - LOG_LEVEL=debug
+      - ENVIRONMENT=development
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+    ports:
+      - "8000:8000"
+    depends_on:
+      - iam-service
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Clinical Notes Service
+  clinical-notes-service:
+    build:
+      context: ../../
+      dockerfile: cmd/clinical-notes-service/Dockerfile
+    container_name: clinical-notes-service
+    environment:
+      - PORT=8081
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=medrex_emr
+      - DATABASE_USERNAME=medrex_user
+      - DATABASE_PASSWORD=medrex_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ENCRYPTION_KEY=dev-encryption-key-32-chars-long
+      - FABRIC_NETWORK_CONFIG_PATH=/app/config/fabric-network.yaml
+      - LOG_LEVEL=debug
+      - ENVIRONMENT=development
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - redis
+      - iam-service
+      - peer-hospital
+      - peer-pharmacy
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Scheduling Service
+  scheduling-service:
+    build:
+      context: ../../
+      dockerfile: cmd/scheduling-service/Dockerfile
+    container_name: scheduling-service
+    environment:
+      - PORT=8082
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=medrex_emr
+      - DATABASE_USERNAME=medrex_user
+      - DATABASE_PASSWORD=medrex_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=debug
+      - ENVIRONMENT=development
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Mobile Workflow Service
+  mobile-workflow-service:
+    build:
+      context: ../../
+      dockerfile: cmd/mobile-workflow-service/Dockerfile
+    container_name: mobile-workflow-service
+    environment:
+      - PORT=8083
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=medrex_emr
+      - DATABASE_USERNAME=medrex_user
+      - DATABASE_PASSWORD=medrex_dev_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FABRIC_NETWORK_CONFIG_PATH=/app/config/fabric-network.yaml
+      - CLINICAL_NOTES_SERVICE_URL=http://clinical-notes-service:8081
+      - IAM_SERVICE_URL=http://iam-service:8080
+      - LOG_LEVEL=debug
+      - ENVIRONMENT=development
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - redis
+      - clinical-notes-service
+      - iam-service
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Mailhog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Nginx for reverse proxy and static file serving
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - api-gateway
+    networks:
+      - medrex-dev
+    restart: unless-stopped
+
+  # Development tools container
+  dev-tools:
+    image: alpine:latest
+    container_name: dev-tools
+    command: tail -f /dev/null
+    volumes:
+      - ../../:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    networks:
+      - medrex-dev
+    restart: unless-stopped

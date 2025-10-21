@@ -1,0 +1,338 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orderer0
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fabric-orderer
+      node: orderer0
+  template:
+    metadata:
+      labels:
+        app: fabric-orderer
+        node: orderer0
+    spec:
+      containers:
+      - name: orderer
+        image: hyperledger/fabric-orderer:2.5
+        ports:
+        - containerPort: 7050
+        - containerPort: 8443
+        env:
+        - name: FABRIC_LOGGING_SPEC
+          value: "INFO"
+        - name: ORDERER_GENERAL_LISTENADDRESS
+          value: "0.0.0.0"
+        - name: ORDERER_GENERAL_LISTENPORT
+          value: "7050"
+        - name: ORDERER_GENERAL_LOCALMSPID
+          value: "OrdererMSP"
+        - name: ORDERER_GENERAL_LOCALMSPDIR
+          value: "/var/hyperledger/orderer/msp"
+        - name: ORDERER_GENERAL_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_GENERAL_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_CLUSTER_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_BOOTSTRAPMETHOD
+          value: "none"
+        - name: ORDERER_CHANNELPARTICIPATION_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_ADMIN_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_ADMIN_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_TLS_CLIENTROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_LISTENADDRESS
+          value: "0.0.0.0:8443"
+        volumeMounts:
+        - name: orderer-storage
+          mountPath: /var/hyperledger/production/orderer
+        - name: orderer-msp
+          mountPath: /var/hyperledger/orderer/msp
+        - name: orderer-tls
+          mountPath: /var/hyperledger/orderer/tls
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: orderer-storage
+        persistentVolumeClaim:
+          claimName: fabric-orderer0-pvc
+      - name: orderer-msp
+        configMap:
+          name: orderer0-msp-config
+      - name: orderer-tls
+        secret:
+          secretName: orderer0-tls-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orderer0-service
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer0
+spec:
+  selector:
+    app: fabric-orderer
+    node: orderer0
+  ports:
+  - name: grpc
+    port: 7050
+    targetPort: 7050
+  - name: admin
+    port: 8443
+    targetPort: 8443
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orderer1
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fabric-orderer
+      node: orderer1
+  template:
+    metadata:
+      labels:
+        app: fabric-orderer
+        node: orderer1
+    spec:
+      containers:
+      - name: orderer
+        image: hyperledger/fabric-orderer:2.5
+        ports:
+        - containerPort: 7050
+        - containerPort: 8443
+        env:
+        - name: FABRIC_LOGGING_SPEC
+          value: "INFO"
+        - name: ORDERER_GENERAL_LISTENADDRESS
+          value: "0.0.0.0"
+        - name: ORDERER_GENERAL_LISTENPORT
+          value: "7050"
+        - name: ORDERER_GENERAL_LOCALMSPID
+          value: "OrdererMSP"
+        - name: ORDERER_GENERAL_LOCALMSPDIR
+          value: "/var/hyperledger/orderer/msp"
+        - name: ORDERER_GENERAL_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_GENERAL_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_CLUSTER_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_BOOTSTRAPMETHOD
+          value: "none"
+        - name: ORDERER_CHANNELPARTICIPATION_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_ADMIN_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_ADMIN_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_TLS_CLIENTROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_LISTENADDRESS
+          value: "0.0.0.0:8443"
+        volumeMounts:
+        - name: orderer-storage
+          mountPath: /var/hyperledger/production/orderer
+        - name: orderer-msp
+          mountPath: /var/hyperledger/orderer/msp
+        - name: orderer-tls
+          mountPath: /var/hyperledger/orderer/tls
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: orderer-storage
+        persistentVolumeClaim:
+          claimName: fabric-orderer1-pvc
+      - name: orderer-msp
+        configMap:
+          name: orderer1-msp-config
+      - name: orderer-tls
+        secret:
+          secretName: orderer1-tls-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orderer1-service
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer1
+spec:
+  selector:
+    app: fabric-orderer
+    node: orderer1
+  ports:
+  - name: grpc
+    port: 7050
+    targetPort: 7050
+  - name: admin
+    port: 8443
+    targetPort: 8443
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orderer2
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fabric-orderer
+      node: orderer2
+  template:
+    metadata:
+      labels:
+        app: fabric-orderer
+        node: orderer2
+    spec:
+      containers:
+      - name: orderer
+        image: hyperledger/fabric-orderer:2.5
+        ports:
+        - containerPort: 7050
+        - containerPort: 8443
+        env:
+        - name: FABRIC_LOGGING_SPEC
+          value: "INFO"
+        - name: ORDERER_GENERAL_LISTENADDRESS
+          value: "0.0.0.0"
+        - name: ORDERER_GENERAL_LISTENPORT
+          value: "7050"
+        - name: ORDERER_GENERAL_LOCALMSPID
+          value: "OrdererMSP"
+        - name: ORDERER_GENERAL_LOCALMSPDIR
+          value: "/var/hyperledger/orderer/msp"
+        - name: ORDERER_GENERAL_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_GENERAL_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_GENERAL_CLUSTER_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_GENERAL_BOOTSTRAPMETHOD
+          value: "none"
+        - name: ORDERER_CHANNELPARTICIPATION_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_ENABLED
+          value: "true"
+        - name: ORDERER_ADMIN_TLS_CERTIFICATE
+          value: "/var/hyperledger/orderer/tls/server.crt"
+        - name: ORDERER_ADMIN_TLS_PRIVATEKEY
+          value: "/var/hyperledger/orderer/tls/server.key"
+        - name: ORDERER_ADMIN_TLS_ROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_TLS_CLIENTROOTCAS
+          value: "[/var/hyperledger/orderer/tls/ca.crt]"
+        - name: ORDERER_ADMIN_LISTENADDRESS
+          value: "0.0.0.0:8443"
+        volumeMounts:
+        - name: orderer-storage
+          mountPath: /var/hyperledger/production/orderer
+        - name: orderer-msp
+          mountPath: /var/hyperledger/orderer/msp
+        - name: orderer-tls
+          mountPath: /var/hyperledger/orderer/tls
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: orderer-storage
+        persistentVolumeClaim:
+          claimName: fabric-orderer2-pvc
+      - name: orderer-msp
+        configMap:
+          name: orderer2-msp-config
+      - name: orderer-tls
+        secret:
+          secretName: orderer2-tls-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orderer2-service
+  namespace: medrex-fabric
+  labels:
+    app: fabric-orderer
+    node: orderer2
+spec:
+  selector:
+    app: fabric-orderer
+    node: orderer2
+  ports:
+  - name: grpc
+    port: 7050
+    targetPort: 7050
+  - name: admin
+    port: 8443
+    targetPort: 8443
+  type: ClusterIP

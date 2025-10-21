@@ -1,0 +1,106 @@
+﻿AI CODING AGENT MANDATE: MEDREX DLT ARCHITECTURE IMPLEMENTATION (MVP)
+PROJECT ID: MEDREX_V2.0_DLT_MVP PHASE: Foundation and Core Identity Services (Phase 1) SCOPE: complete EMR with a compliant, scalable, Cloud-Native Microservices architecture powered by Hyperledger Fabric. The agent must deliver all DLT infrastructure setup (IaC/Scripts) and backend microservices using the Go language mandate.
+I. TECHNICAL STACK & LANGUAGE MANDATES
+1. Backend Microservices: Go (Mandatory for high performance and minimal latency).
+2. Frontend: React (Web Portal), React Native (Mobile Apps).
+3. Database (Off-Chain PHI): PostgreSQL with mandatory 256-bit AES encryption at rest (HIPAA/GDPR compliance).[1]
+4. Decentralized Ledger (DLT): Hyperledger Fabric (HF) v2.5 LTS with Raft consensus.[2]
+5. Chaincode Language: Go (Mandatory).[3]
+II. HYPERLEDGER FABRIC (DLT) ARCHITECTURAL SPECIFICATION
+The implementation must strictly adhere to a Hybrid DLT Model for handling Protected Health Information (PHI).[4] The focus is on delivering Infrastructure as a Service (IaaS) definition via code.
+2.1. Infrastructure and Node Deployment (IaC)
+The agent must generate deployment scripts (e.g., Kubernetes manifests, Docker Compose, Terraform configuration) for an enterprise-grade Hyperledger Fabric network.[5, 6, 7]
+1. Ordering Service: Deploy a fault-tolerant, known-identity Raft Consensus ordering service with a minimum of three ordering nodes.[8, 9]
+2. Peers: Deploy multiple Peers for two minimum organizations (e.g., HospitalOrg, PharmacyOrg) to maintain state and validate transactions. Peers must utilize CouchDB for the World State and be provisioned with high-IOPs storage for performance.[3]
+3. Membership Service Provider (MSP) / Certificate Authorities (CAs): Deploy dedicated Fabric CAs for each organization to manage enrollment, identity, and X.509 certificates. The CAs must bind organizational roles and attributes (e.g., "Physician," "Pharmacist") to the X.509 certificates for use in Chaincode policy enforcement.[10, 11, 12]
+2.2. Data Handling and Key Management (Compliance Mandate)
+1. PHI Storage Mandate: PHI (clinical notes, lab results, imaging files) must NOT be stored on the blockchain ledger.[12, 13] PHI resides exclusively off-chain in the encrypted PostgreSQL database.[1]
+2. On-Chain Content: The HF ledger will only store [4, 14]:
+   * Cryptographic hashes (SHA-256) of the PHI records (proof of data integrity).[15]
+   * Metadata (patient ID, creation time, owner).
+   * The active Access Control Policies enforced by the Smart Contracts.[13]
+3. Key Management Integration: Implement the cryptographic layer utilizing Proxy Re-Encryption (PRE) principles. The system must securely interface with a Managed Hardware Security Module (HSM) service (e.g., Azure Key Vault Premium) to manage and protect all cryptographic keys (PRE keys, DLT signing keys).[4, 16]
+2.3. Chaincode (Smart Contract) Development (Go)
+Develop and deploy two core chaincode modules written in Go to a dedicated HF channel [3]:
+1. AccessPolicyChaincode (The Governance Layer):
+   * Function: Stores and enforces the complete Role-Based Access Control (RBAC) matrix (Section III).[17, 18]
+   * Execution Mandate: Must automatically verify the requesting user’s role (extracted from the authenticated X.509 certificate/MSP attributes) against the resource access policy.[12, 18]
+   * Action: Only upon successful policy verification does it release the necessary token or cryptographic information (e.g., PRE re-encryption token/key pointer) required for the user/microservice to access the off-chain encrypted PHI.[19]
+2. AuditLogChaincode (The Immutable Record):
+   * Function: Serves as the immutable, write-only central repository for all critical system events.[20]
+   * Event Capture Mandate: Must record every instance of: User Login/Logout, PHI Access Attempt (Success/Failure), Data Modification, Critical Order Entry (CPOE), and all regulatory reporting activity.[21]
+   * Security Mandate: Each log entry must be cryptographically signed by the responsible peer/user identity and time-stamped, ensuring non-repudiation and tamper-proof auditing.[19]
+III. ROLE-BASED ACCESS CONTROL (RBAC) MATRIX IMPLEMENTATION
+The agent must build the Identity and Access Management (IAM) microservice to strictly enforce the following RBAC policy, which defines the actions (Create, Read/View, Update, Delete - CRUD) permitted for each role on critical system resources. This policy must be translated into enforceable access rules within the AccessPolicyChaincode.[12, 22]
+User Role
+	EHR (Read/View PHI)
+	Orders (CPOE/Update)
+	Research Data (Access)
+	Financial/Billing (CRUD)
+	Admin (User Mgt/RBAC)
+	1. Patient
+	Read Own EHR; Secure Comms
+	Appointment Scheduling (C)
+	Complete Questionnaires (C)
+	Payment Interface/Inquiry (R/C)
+	No Access
+	2. MBBS UG Student/Intern
+	Read De-Identified Data (Training); View Assigned Patient Charts (Read-Only, Supervised)
+	No CPOE
+	Read Only (Approved Studies)
+	No Access
+	No Access
+	3. MD/MS PG Student
+	Read Assigned Patient Charts; View Lab/Imaging (R)
+	Restricted CPOE (Requires Consultant Co-sign); Execute (U)
+	Read Only/Contribute Data Forms (C)
+	Read Patient Financial Status (R)
+	No Access
+	4. Consulting Doctor/Faculty
+	Full Access to Assigned Patients (R/V)
+	Full CPOE (e-Prescribing) (C/U)
+	Full Research Data Control (PI Role) (C/R/U/D)
+	Read Only (Hospital Level) (R)
+	View Department Staff (R)
+	5. Nursing Staff
+	Full Access to Ward Patients; Bedside Charting (U)
+	Medication/Routine Administration (Execution/Documentation) (U)
+	Limited Read (Protocol Compliance) (R)
+	No Access
+	No Access
+	6. Lab Technician
+	Access Relevant Orders; View Results (R)
+	Create/Update Lab Results (C/U)
+	No Access
+	No Access
+	No Access
+	7. Receptionist/Front Desk
+	Demographic/Registration Data (R); Appointment Status (R)
+	Schedule Appointments (C)
+	No Access
+	Create Invoices/Take Payments (C)
+	No Access
+	8. Clinical/Paraclinical Staff
+	Read Specific Patient Data (R)
+	Order Specialized Services (C)
+	No Access
+	Limited Read (Service Charges) (R)
+	No Access
+	9. Administrative (C-Suite)
+	Read Aggregated/De-Identified Data (R)
+	No CPOE
+	Read Only (R)
+	Full Billing/Financial Management (R/V)
+	Full User Management/Audit (C/R/U/D)
+	IV. AI STEERING AND GOVERNANCE MANDATES
+1. Quantifiable Quality Mandate: The AI agent must generate comprehensive Unit Tests alongside the code to meet and verify a minimum line test coverage threshold of 85%.[16, 23]
+2. Human-in-the-Loop (HITL) Protocol: All generated Chaincode (AccessPolicyChaincode, AuditLogChaincode) must be flagged for mandatory human review and expert co-signature before deployment to the staging environment.[16]
+3. Traceability and Identity: Every output (code commit, documentation, regulatory artifact) must be traceable. The agent must embed its unique identity and time-stamps in the source control metadata to ensure regulatory accountability for autonomous actions.[6]
+4. Data Protection by Design: The agent must enforce strict PHI Classification and Prompt Screening throughout the development and testing phases to prevent sensitive patient data (PHI) from being exposed to the underlying Large Language Model (LLM) or test environments.[24]
+V. CORE MICROSERVICE DELIVERABLES (MVP)
+The AI agent must deliver the following containerized microservices (using Go):
+1. IAM Microservice (Go): Handles user registration, interfaces with the HF MSP/CAs (PKI) for initial identity validation, enforces MFA, and performs real-time authorization checks against the AccessPolicyChaincode.[11, 25]
+2. API Gateway Service (Go/Proxy Layer): Serves as the single, secure entry point for all frontends (Web, Mobile). Must implement OAuth 2.0/JWT validation, rate limiting, and role-based routing as defined by the IAM service before forwarding requests to the Fabric network via the Hyperledger Fabric Gateway Service.[26, 27, 28]
+3. Scheduling Microservice (Go): Handles appointment scheduling and resource availability.
+4. Clinical Notes Microservice (Go): Manages the secure off-chain PostgreSQL database. This service must only retrieve and decrypt PHI records after validating an authorization token/pointer issued by the AccessPolicyChaincode via the API Gateway.[29, 30]
+5. Mobile Workflow Microservice (Go): Optimized APIs for the React Native applications, specifically supporting secure workflows for CPOE and barcode/specimen scanning. Must implement the Consultant Co-sign workflow logic for PG Students.[31]

@@ -1,0 +1,91 @@
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@medrex.local'
+  smtp_auth_username: 'alerts@medrex.local'
+  smtp_auth_password: 'password'
+
+route:
+  group_by: ['alertname', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 5s
+      repeat_interval: 30m
+    - match:
+        category: security
+      receiver: 'security-alerts'
+      group_wait: 0s
+      repeat_interval: 15m
+    - match:
+        category: compliance
+      receiver: 'compliance-alerts'
+      group_wait: 0s
+      repeat_interval: 5m
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://webhook-service:5001/alerts'
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'ops-team@medrex.local'
+        subject: 'CRITICAL: {{ .GroupLabels.alertname }} in {{ .GroupLabels.service }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+    webhook_configs:
+      - url: 'http://webhook-service:5001/critical'
+        send_resolved: true
+
+  - name: 'security-alerts'
+    email_configs:
+      - to: 'security-team@medrex.local'
+        subject: 'SECURITY ALERT: {{ .GroupLabels.alertname }}'
+        body: |
+          SECURITY INCIDENT DETECTED
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+    webhook_configs:
+      - url: 'http://webhook-service:5001/security'
+        send_resolved: true
+
+  - name: 'compliance-alerts'
+    email_configs:
+      - to: 'compliance-team@medrex.local'
+        subject: 'COMPLIANCE VIOLATION: {{ .GroupLabels.alertname }}'
+        body: |
+          COMPLIANCE VIOLATION DETECTED
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Violation Type: {{ .Labels.violation_type }}
+          Time: {{ .StartsAt }}
+          
+          IMMEDIATE ACTION REQUIRED
+          {{ end }}
+    webhook_configs:
+      - url: 'http://webhook-service:5001/compliance'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']

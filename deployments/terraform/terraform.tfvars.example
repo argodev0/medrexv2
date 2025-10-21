@@ -1,0 +1,66 @@
+# Example Terraform variables file for Medrex DLT EMR
+# Copy this file to terraform.tfvars and customize the values
+
+# Basic Configuration
+aws_region   = "us-west-2"
+project_name = "medrex-dlt-emr"
+environment  = "dev"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]  # Restrict this in production
+
+# EKS Configuration
+kubernetes_version = "1.28"
+
+# Database Configuration
+db_instance_class      = "db.r5.xlarge"
+db_allocated_storage   = 100
+db_max_allocated_storage = 1000
+db_name               = "medrex_emr"
+db_username           = "medrex_admin"
+db_password           = "change-this-password-in-production"  # Use AWS Secrets Manager in production
+
+# HSM Configuration
+enable_hsm = false  # Set to true for production with HSM requirements
+
+# SSL Certificate (obtain from AWS Certificate Manager)
+ssl_certificate_arn = ""  # arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012
+
+# Domain Configuration
+domain_name    = "medrex.com"
+api_subdomain  = "api"
+
+# Security Configuration
+enable_waf       = true
+enable_shield    = false  # Enable for production
+enable_guardduty = true
+
+# Monitoring and Logging
+enable_cloudwatch_logs = true
+log_retention_days     = 30
+
+# Backup Configuration
+backup_retention_days      = 30
+enable_cross_region_backup = false
+backup_region             = "us-east-1"
+
+# Cost Optimization
+enable_spot_instances      = true
+enable_cluster_autoscaler  = true
+
+# Compliance and Governance
+enable_config     = true
+enable_cloudtrail = true
+
+# Network Security
+enable_vpc_flow_logs = true
+allowed_cidr_blocks  = []  # Add specific CIDR blocks for enhanced security
+
+# Additional Tags
+additional_tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "Healthcare IT"
+  Compliance  = "HIPAA"
+  Backup      = "Required"
+}

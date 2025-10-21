@@ -1,0 +1,73 @@
+# Cryptogen configuration for Medrex DLT EMR network
+# Generates X.509 certificates for all network participants
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: medrex.com
+    EnableNodeOUs: false
+    Specs:
+      - Hostname: orderer1
+        SANS:
+          - localhost
+      - Hostname: orderer2
+        SANS:
+          - localhost
+      - Hostname: orderer3
+        SANS:
+          - localhost
+
+PeerOrgs:
+  - Name: Hospital
+    Domain: hospital.medrex.com
+    EnableNodeOUs: true
+    Template:
+      Count: 2
+      SANS:
+        - localhost
+    Users:
+      Count: 5
+      # Additional users for different roles
+      Names:
+        - Name: "admin"
+          Attributes:
+            - Name: "role"
+              Value: "administrator"
+        - Name: "doctor1"
+          Attributes:
+            - Name: "role"
+              Value: "consulting_doctor"
+        - Name: "nurse1"
+          Attributes:
+            - Name: "role"
+              Value: "nurse"
+        - Name: "student1"
+          Attributes:
+            - Name: "role"
+              Value: "md_student"
+        - Name: "receptionist1"
+          Attributes:
+            - Name: "role"
+              Value: "receptionist"
+
+  - Name: Pharmacy
+    Domain: pharmacy.medrex.com
+    EnableNodeOUs: true
+    Template:
+      Count: 2
+      SANS:
+        - localhost
+    Users:
+      Count: 3
+      Names:
+        - Name: "admin"
+          Attributes:
+            - Name: "role"
+              Value: "administrator"
+        - Name: "pharmacist1"
+          Attributes:
+            - Name: "role"
+              Value: "clinical_staff"
+        - Name: "technician1"
+          Attributes:
+            - Name: "role"
+              Value: "lab_technician"

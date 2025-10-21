@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: medrex-fabric
+  labels:
+    app.kubernetes.io/name: medrex-fabric
+    app.kubernetes.io/part-of: medrex-dlt-emr
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: medrex-services
+  labels:
+    app.kubernetes.io/name: medrex-services
+    app.kubernetes.io/part-of: medrex-dlt-emr
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: medrex-data
+  labels:
+    app.kubernetes.io/name: medrex-data
+    app.kubernetes.io/part-of: medrex-dlt-emr

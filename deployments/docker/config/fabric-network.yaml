@@ -1,0 +1,78 @@
+# Hyperledger Fabric Network Configuration for Development
+name: medrex-dev-network
+version: 1.0.0
+
+client:
+  organization: HospitalOrg
+  logging:
+    level: info
+  connection:
+    timeout:
+      peer:
+        endorser: '300'
+
+organizations:
+  HospitalOrg:
+    mspid: HospitalMSP
+    peers:
+      - peer-hospital
+    certificateAuthorities:
+      - ca-hospital
+
+  PharmacyOrg:
+    mspid: PharmacyMSP
+    peers:
+      - peer-pharmacy
+    certificateAuthorities:
+      - ca-pharmacy
+
+orderers:
+  orderer:
+    url: orderer:7050
+    grpcOptions:
+      ssl-target-name-override: orderer
+      hostnameOverride: orderer
+
+peers:
+  peer-hospital:
+    url: peer-hospital:7051
+    grpcOptions:
+      ssl-target-name-override: peer-hospital
+      hostnameOverride: peer-hospital
+
+  peer-pharmacy:
+    url: peer-pharmacy:8051
+    grpcOptions:
+      ssl-target-name-override: peer-pharmacy
+      hostnameOverride: peer-pharmacy
+
+certificateAuthorities:
+  ca-hospital:
+    url: http://ca-hospital:7054
+    caName: ca-hospital
+    registrar:
+      enrollId: admin
+      enrollSecret: adminpw
+
+  ca-pharmacy:
+    url: http://ca-pharmacy:8054
+    caName: ca-pharmacy
+    registrar:
+      enrollId: admin
+      enrollSecret: adminpw
+
+channels:
+  healthcare:
+    orderers:
+      - orderer
+    peers:
+      peer-hospital:
+        endorsingPeer: true
+        chaincodeQuery: true
+        ledgerQuery: true
+        eventSource: true
+      peer-pharmacy:
+        endorsingPeer: true
+        chaincodeQuery: true
+        ledgerQuery: true
+        eventSource: true
