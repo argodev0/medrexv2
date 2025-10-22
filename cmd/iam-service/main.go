@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 
 	"github.com/medrex/dlt-emr/internal/iam"
+	"github.com/medrex/dlt-emr/internal/rbac"
 	"github.com/medrex/dlt-emr/pkg/config"
 	"github.com/medrex/dlt-emr/pkg/database"
 	"github.com/medrex/dlt-emr/pkg/logger"
@@ -47,6 +49,54 @@ func main() {
 	userRepo := iam.NewUserRepository(db, log)
 
 	// Initialize IAM service
+	// Create RBAC components
+	rbacConfig := &rbac.Config{
+		CacheTTL:                     time.Hour,
+		SupervisionTimeout:           30 * time.Minute,
+		CertificateValidity:          24 * time.Hour,
+		AuditRetentionDays:           90,
+		MaxPolicyVersions:            10,
+		EnableEmergencyOverride:      false,
+		FabricNetworkConfig:          "",
+		DatabaseURL:                  "",
+		AccessMonitorBufferSize:      1000,
+		AlertBufferSize:              100,
+		PerformanceBufferSize:        1000,
+		DecisionCacheSize:            10000,
+		RolePermCacheSize:            5000,
+	}
+	
+	rbacLogger := logrus.New()
+	rbacLogger.SetLevel(logrus.InfoLevel)
+	
+	rbacEngine, err := rbac.NewRBACCoreEngine(rbacConfig, rbacLogger)
+	if err != nil {
+		log.Error("Failed to create RBAC engine", "error", err)
+		os.Exit(1)
+	}
+	
+	abacEngine, err := rbac.NewABACEngine(rbacConfig, rbacLogger, nil)
+	if err != nil {
+		log.Error("Failed to create ABAC engine", "error", err)
+		os.Exit(1)
+	}
+	
+	// Create certificate manager for RBAC
+	certManagerConfig := &rbac.CertManagerConfig{
+		OrgMSP:         "HospitalOrgMSP",
+		CAURL:          "http://localhost:7054",
+		TLSEnabled:     false,
+		CACertPath:     "",
+		ClientCertPath: "",
+		ClientKeyPath:  "",
+	}
+	
+	rbacCertManager, err := rbac.NewCertificateManager(certManagerConfig, rbacLogger, nil)
+	if err != nil {
+		log.Error("Failed to create RBAC certificate manager", "error", err)
+		os.Exit(1)
+	}
+
 	iamService := iam.NewService(
 		cfg,
 		log,
@@ -54,6 +104,9 @@ func main() {
 		certManager,
 		mfaProvider,
 		passwordManager,
+		rbacEngine,
+		abacEngine,
+		rbacCertManager,
 	)
 
 	// Initialize HTTP handlers

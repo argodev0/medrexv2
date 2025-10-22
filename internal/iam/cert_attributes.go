@@ -2,32 +2,229 @@ package iam
 
 import (
 	"crypto/x509"
-	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/medrex/dlt-emr/pkg/logger"
-	"github.com/medrex/dlt-emr/pkg/types"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 )
 
-// CertificateAttributeExtractor handles X.509 certificate attribute extraction
+// CertificateAttributeExtractor extracts attributes from X.509 certificates
 type CertificateAttributeExtractor struct {
 	logger logger.Logger
 }
 
 // NewCertificateAttributeExtractor creates a new certificate attribute extractor
-func NewCertificateAttributeExtractor(log logger.Logger) *CertificateAttributeExtractor {
+func NewCertificateAttributeExtractor(logger logger.Logger) *CertificateAttributeExtractor {
 	return &CertificateAttributeExtractor{
-		logger: log,
+		logger: logger,
 	}
 }
 
-// ExtractUserAttributes extracts user attributes from X.509 certificate
+// ExtractUserAttributes extracts user attributes from a certificate PEM string
 func (e *CertificateAttributeExtractor) ExtractUserAttributes(certPEM string) (map[string]string, error) {
-	e.logger.Info("Extracting attributes from X.509 certificate")
+	if certPEM == "" {
+		return nil, fmt.Errorf("certificate PEM is empty")
+	}
 
-	// Parse PEM certificate
+	// Parse PEM block
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to parse certificate PEM")
+	}
+
+	// Parse X.509 certificate
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse X.509 certificate: %w", err)
+	}
+
+	// Extract attributes from certificate
+	attributes := make(map[string]string)
+
+	// Extract from subject DN
+	if cert.Subject.CommonName != "" {
+		attributes["common_name"] = cert.Subject.CommonName
+	}
+
+	if len(cert.Subject.Organization) > 0 {
+		attributes["organization"] = cert.Subject.Organization[0]
+	}
+
+	if len(cert.Subject.OrganizationalUnit) > 0 {
+		attributes["organizational_unit"] = cert.Subject.OrganizationalUnit[0]
+	}
+
+	// Extract from certificate extensions (Fabric CA attributes)
+	for _, ext := range cert.Extensions {
+		if ext.Id.String() == "1.2.3.4.5.6.7.8.1" { // Example OID for custom attributes
+			attrString := string(ext.Value)
+			e.parseAttributeString(attrString, attributes)
+		}
+	}
+
+	// Extract role from organizational unit or subject
+	if role := e.extractRoleFromCert(cert); role != "" {
+		attributes["role"] = role
+	}
+
+	// Set derived attributes
+	e.setDerivedAttributes(attributes)
+
+	e.logger.Info("Extracted certificate attributes", "attributes", attributes)
+	return attributes, nil
+}
+
+// ExtractUserAttributesStruct extracts user attributes and returns as UserAttributes struct
+func (e *CertificateAttributeExtractor) ExtractUserAttributesStruct(certPEM string) (*rbac.UserAttributes, error) {
+	attrs, err := e.ExtractUserAttributes(certPEM)
+	if err != nil {
+		return nil, err
+	}
+
+	userAttrs := &rbac.UserAttributes{}
+
+	if role, exists := attrs["role"]; exists {
+		userAttrs.Role = role
+	}
+
+	if specialty, exists := attrs["specialty"]; exists {
+		userAttrs.Specialty = specialty
+	}
+
+	if dept, exists := attrs["department"]; exists {
+		userAttrs.Department = dept
+	}
+
+	if ward, exists := attrs["ward_assignment"]; exists {
+		userAttrs.WardAssignment = ward
+	}
+
+	if lab, exists := attrs["lab_org"]; exists {
+		userAttrs.LabOrg = lab
+	}
+
+	if isTrainee, exists := attrs["is_trainee"]; exists {
+		userAttrs.IsTrainee = isTrainee == "true"
+	}
+
+	if isSupervisor, exists := attrs["is_supervisor"]; exists {
+		userAttrs.IsSupervisor = isSupervisor == "true"
+	}
+
+	if levelStr, exists := attrs["level"]; exists {
+		if level, err := strconv.Atoi(levelStr); err == nil {
+			userAttrs.Level = level
+		}
+	}
+
+	return userAttrs, nil
+}
+
+// ValidateCertificateAttributes validates that certificate contains required attributes
+func (e *CertificateAttributeExtractor) ValidateCertificateAttributes(certPEM string, requiredAttrs []string) error {
+	attrs, err := e.ExtractUserAttributes(certPEM)
+	if err != nil {
+		return fmt.Errorf("failed to extract attributes: %w", err)
+	}
+
+	for _, required := range requiredAttrs {
+		if _, exists := attrs[required]; !exists {
+			return fmt.Errorf("required attribute '%s' not found in certificate", required)
+		}
+	}
+
+	return nil
+}
+
+// extractRoleFromCert extracts role from certificate subject or extensions
+func (e *CertificateAttributeExtractor) extractRoleFromCert(cert *x509.Certificate) string {
+	// Try to extract from organizational unit
+	for _, ou := range cert.Subject.OrganizationalUnit {
+		if role := e.mapNodeOUToRole(ou); role != "" {
+			return role
+		}
+	}
+
+	// Try to extract from common name pattern
+	cn := cert.Subject.CommonName
+	if strings.Contains(cn, "@") {
+		parts := strings.Split(cn, "@")
+		if len(parts) > 1 {
+			// Check if the part before @ matches a role pattern
+			userPart := parts[0]
+			for roleID := range rbac.RoleLevels {
+				if strings.Contains(userPart, roleID) {
+					return roleID
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// mapNodeOUToRole maps NodeOU to role ID
+func (e *CertificateAttributeExtractor) mapNodeOUToRole(nodeOU string) string {
+	for roleID, mappedNodeOU := range rbac.NodeOUMappings {
+		if nodeOU == mappedNodeOU {
+			return roleID
+		}
+	}
+	return ""
+}
+
+// parseAttributeString parses attribute string from certificate extension
+func (e *CertificateAttributeExtractor) parseAttributeString(attrString string, attributes map[string]string) {
+	// Parse attribute string format: "attr1=value1,attr2=value2"
+	pairs := strings.Split(attrString, ",")
+	for _, pair := range pairs {
+		if kv := strings.SplitN(pair, "=", 2); len(kv) == 2 {
+			key := strings.TrimSpace(kv[0])
+			value := strings.TrimSpace(kv[1])
+			attributes[key] = value
+		}
+	}
+}
+
+// setDerivedAttributes sets derived attributes based on role and other attributes
+func (e *CertificateAttributeExtractor) setDerivedAttributes(attributes map[string]string) {
+	role := attributes["role"]
+	
+	// Set trainee status based on role
+	switch role {
+	case rbac.RoleMBBSStudent, rbac.RoleMDStudent:
+		attributes["is_trainee"] = "true"
+		attributes["is_supervisor"] = "false"
+	case rbac.RoleConsultingDoctor:
+		attributes["is_trainee"] = "false"
+		attributes["is_supervisor"] = "true"
+	default:
+		if attributes["is_trainee"] == "" {
+			attributes["is_trainee"] = "false"
+		}
+		if attributes["is_supervisor"] == "" {
+			attributes["is_supervisor"] = "false"
+		}
+	}
+
+	// Set level based on role
+	if level, exists := rbac.RoleLevels[role]; exists {
+		attributes["level"] = strconv.Itoa(level)
+	}
+
+	// Set NodeOU if not present
+	if attributes["node_ou"] == "" {
+		if nodeOU, exists := rbac.NodeOUMappings[role]; exists {
+			attributes["node_ou"] = nodeOU
+		}
+	}
+}
+
+// GetCertificateInfo extracts basic certificate information
+func (e *CertificateAttributeExtractor) GetCertificateInfo(certPEM string) (*CertificateInfo, error) {
 	block, _ := pem.Decode([]byte(certPEM))
 	if block == nil {
 		return nil, fmt.Errorf("failed to parse certificate PEM")
@@ -35,254 +232,25 @@ func (e *CertificateAttributeExtractor) ExtractUserAttributes(certPEM string) (m
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+		return nil, fmt.Errorf("failed to parse X.509 certificate: %w", err)
 	}
 
-	attributes := make(map[string]string)
-
-	// Extract standard certificate fields
-	attributes["common_name"] = cert.Subject.CommonName
-	attributes["serial_number"] = cert.SerialNumber.String()
-	attributes["issuer"] = cert.Issuer.String()
-	attributes["not_before"] = cert.NotBefore.Format("2006-01-02T15:04:05Z")
-	attributes["not_after"] = cert.NotAfter.Format("2006-01-02T15:04:05Z")
-
-	// Extract organization information
-	if len(cert.Subject.Organization) > 0 {
-		attributes["organization"] = cert.Subject.Organization[0]
-	}
-	if len(cert.Subject.OrganizationalUnit) > 0 {
-		attributes["organizational_unit"] = cert.Subject.OrganizationalUnit[0]
-	}
-	if len(cert.Subject.Country) > 0 {
-		attributes["country"] = cert.Subject.Country[0]
-	}
-	if len(cert.Subject.Province) > 0 {
-		attributes["province"] = cert.Subject.Province[0]
-	}
-	if len(cert.Subject.Locality) > 0 {
-		attributes["locality"] = cert.Subject.Locality[0]
-	}
-
-	// Extract Fabric-specific attributes from certificate extensions
-	fabricAttrs, err := e.extractFabricAttributes(cert)
-	if err != nil {
-		e.logger.Warn("Failed to extract Fabric attributes", "error", err)
-	} else {
-		for key, value := range fabricAttrs {
-			attributes[key] = value
-		}
-	}
-
-	// Extract role information from subject or extensions
-	role, err := e.extractUserRole(cert, attributes)
-	if err != nil {
-		e.logger.Warn("Failed to extract user role", "error", err)
-	} else {
-		attributes["role"] = string(role)
-	}
-
-	e.logger.Info("Extracted certificate attributes", "count", len(attributes))
-	return attributes, nil
+	return &CertificateInfo{
+		Subject:    cert.Subject.String(),
+		Issuer:     cert.Issuer.String(),
+		SerialNumber: cert.SerialNumber.String(),
+		NotBefore:  cert.NotBefore,
+		NotAfter:   cert.NotAfter,
+		IsExpired:  cert.NotAfter.Before(cert.NotBefore),
+	}, nil
 }
 
-// extractFabricAttributes extracts Hyperledger Fabric specific attributes
-func (e *CertificateAttributeExtractor) extractFabricAttributes(cert *x509.Certificate) (map[string]string, error) {
-	attributes := make(map[string]string)
-
-	// Fabric stores custom attributes in certificate extensions
-	// Look for Fabric-specific OIDs
-	for _, ext := range cert.Extensions {
-		if e.isFabricAttributeOID(ext.Id) {
-			attrs, err := e.parseFabricExtension(ext.Value)
-			if err != nil {
-				e.logger.Warn("Failed to parse Fabric extension", "oid", ext.Id.String(), "error", err)
-				continue
-			}
-			for key, value := range attrs {
-				attributes[key] = value
-			}
-		}
-	}
-
-	// Also check subject alternative names for Fabric attributes
-	if len(cert.DNSNames) > 0 {
-		for _, dnsName := range cert.DNSNames {
-			if strings.HasPrefix(dnsName, "fabric.") {
-				// Parse Fabric DNS name format: fabric.attr.value
-				parts := strings.Split(dnsName, ".")
-				if len(parts) >= 3 {
-					attrName := parts[1]
-					attrValue := strings.Join(parts[2:], ".")
-					attributes[attrName] = attrValue
-				}
-			}
-		}
-	}
-
-	return attributes, nil
-}
-
-// isFabricAttributeOID checks if an OID is a Fabric attribute OID
-func (e *CertificateAttributeExtractor) isFabricAttributeOID(oid asn1.ObjectIdentifier) bool {
-	// Fabric typically uses OIDs in the range 1.2.3.4.5.6.7.8.*
-	// This is a simplified check - in production, use actual Fabric OIDs
-	fabricOIDPrefix := []int{1, 2, 3, 4, 5, 6, 7, 8}
-	
-	if len(oid) < len(fabricOIDPrefix) {
-		return false
-	}
-	
-	for i, component := range fabricOIDPrefix {
-		if oid[i] != component {
-			return false
-		}
-	}
-	
-	return true
-}
-
-// parseFabricExtension parses a Fabric certificate extension
-func (e *CertificateAttributeExtractor) parseFabricExtension(extensionValue []byte) (map[string]string, error) {
-	// This is a simplified parser for Fabric extensions
-	// In production, use the actual Fabric certificate parsing logic
-	
-	attributes := make(map[string]string)
-	
-	// Try to parse as ASN.1 sequence
-	var sequence []asn1.RawValue
-	_, err := asn1.Unmarshal(extensionValue, &sequence)
-	if err != nil {
-		// If ASN.1 parsing fails, try to parse as JSON
-		return e.parseFabricJSON(extensionValue)
-	}
-	
-	// Parse ASN.1 sequence as key-value pairs
-	for i := 0; i < len(sequence)-1; i += 2 {
-		if i+1 < len(sequence) {
-			key := string(sequence[i].Bytes)
-			value := string(sequence[i+1].Bytes)
-			attributes[key] = value
-		}
-	}
-	
-	return attributes, nil
-}
-
-// parseFabricJSON parses Fabric attributes stored as JSON in extensions
-func (e *CertificateAttributeExtractor) parseFabricJSON(data []byte) (map[string]string, error) {
-	// In a real implementation, this would parse JSON-encoded attributes
-	// For now, return empty map
-	return make(map[string]string), nil
-}
-
-// extractUserRole extracts user role from certificate
-func (e *CertificateAttributeExtractor) extractUserRole(cert *x509.Certificate, attributes map[string]string) (types.UserRole, error) {
-	// Check if role is explicitly set in attributes
-	if role, exists := attributes["role"]; exists {
-		return types.UserRole(role), nil
-	}
-	
-	// Try to extract role from organizational unit
-	if len(cert.Subject.OrganizationalUnit) > 0 {
-		ou := cert.Subject.OrganizationalUnit[0]
-		if role := e.mapOUToRole(ou); role != "" {
-			return role, nil
-		}
-	}
-	
-	// Try to extract role from common name
-	cn := cert.Subject.CommonName
-	if role := e.extractRoleFromCN(cn); role != "" {
-		return role, nil
-	}
-	
-	// Default to patient role if no role found
-	return types.RolePatient, nil
-}
-
-// mapOUToRole maps organizational unit to user role
-func (e *CertificateAttributeExtractor) mapOUToRole(ou string) types.UserRole {
-	ouLower := strings.ToLower(ou)
-	
-	switch {
-	case strings.Contains(ouLower, "doctor") || strings.Contains(ouLower, "physician"):
-		return types.RoleConsultingDoctor
-	case strings.Contains(ouLower, "nurse"):
-		return types.RoleNurse
-	case strings.Contains(ouLower, "student"):
-		if strings.Contains(ouLower, "md") || strings.Contains(ouLower, "ms") {
-			return types.RoleMDStudent
-		}
-		return types.RoleMBBSStudent
-	case strings.Contains(ouLower, "lab") || strings.Contains(ouLower, "technician"):
-		return types.RoleLabTechnician
-	case strings.Contains(ouLower, "reception") || strings.Contains(ouLower, "front"):
-		return types.RoleReceptionist
-	case strings.Contains(ouLower, "clinical"):
-		return types.RoleClinicalStaff
-	case strings.Contains(ouLower, "admin"):
-		return types.RoleAdministrator
-	default:
-		return ""
-	}
-}
-
-// extractRoleFromCN extracts role from common name
-func (e *CertificateAttributeExtractor) extractRoleFromCN(cn string) types.UserRole {
-	cnLower := strings.ToLower(cn)
-	
-	// Look for role indicators in common name
-	if strings.Contains(cnLower, "dr.") || strings.Contains(cnLower, "doctor") {
-		return types.RoleConsultingDoctor
-	}
-	if strings.Contains(cnLower, "nurse") {
-		return types.RoleNurse
-	}
-	if strings.Contains(cnLower, "student") {
-		return types.RoleMBBSStudent
-	}
-	if strings.Contains(cnLower, "admin") {
-		return types.RoleAdministrator
-	}
-	
-	return ""
-}
-
-// ValidateCertificateRole validates that the certificate role matches expected role
-func (e *CertificateAttributeExtractor) ValidateCertificateRole(certPEM string, expectedRole types.UserRole) (bool, error) {
-	attributes, err := e.ExtractUserAttributes(certPEM)
-	if err != nil {
-		return false, fmt.Errorf("failed to extract attributes: %w", err)
-	}
-	
-	certRole, exists := attributes["role"]
-	if !exists {
-		e.logger.Warn("No role found in certificate")
-		return false, nil
-	}
-	
-	if types.UserRole(certRole) != expectedRole {
-		e.logger.Warn("Certificate role mismatch", "cert_role", certRole, "expected_role", expectedRole)
-		return false, nil
-	}
-	
-	return true, nil
-}
-
-// GetCertificateFingerprint generates a fingerprint for the certificate
-func (e *CertificateAttributeExtractor) GetCertificateFingerprint(certPEM string) (string, error) {
-	block, _ := pem.Decode([]byte(certPEM))
-	if block == nil {
-		return "", fmt.Errorf("failed to parse certificate PEM")
-	}
-	
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse certificate: %w", err)
-	}
-	
-	// Use SHA-256 fingerprint
-	fingerprint := fmt.Sprintf("%x", cert.Raw)
-	return fingerprint, nil
+// CertificateInfo contains basic certificate information
+type CertificateInfo struct {
+	Subject      string `json:"subject"`
+	Issuer       string `json:"issuer"`
+	SerialNumber string `json:"serial_number"`
+	NotBefore    interface{} `json:"not_before"`
+	NotAfter     interface{} `json:"not_after"`
+	IsExpired    bool   `json:"is_expired"`
 }

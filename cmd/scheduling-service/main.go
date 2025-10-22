@@ -31,9 +31,10 @@ func main() {
 
 	// Start service in a goroutine
 	go func() {
-		logger.Infof("Starting Scheduling Service on port %s", port)
+		logger.Info("Starting Scheduling Service", "port", port)
 		if err := service.Start(":" + port); err != nil {
-			logger.Fatalf("Failed to start Scheduling Service: %v", err)
+			logger.Error("Failed to start Scheduling Service", "error", err)
+			panic(err)
 		}
 	}()
 
@@ -44,7 +45,7 @@ func main() {
 
 	logger.Info("Shutting down Scheduling Service...")
 	if err := service.Stop(); err != nil {
-		logger.Errorf("Error during shutdown: %v", err)
+		logger.Error("Error during shutdown", "error", err)
 	}
 	logger.Info("Scheduling Service stopped")
 }

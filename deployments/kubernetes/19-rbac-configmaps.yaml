@@ -1,0 +1,473 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-config
+  namespace: medrex-services
+  labels:
+    app: rbac-system
+    component: configuration
+data:
+  # RBAC Core Engine Configuration
+  policy_cache_size: "10000"
+  decision_timeout: "5s"
+  
+  # ABAC Engine Configuration
+  abac_evaluation_timeout: "3s"
+  attribute_cache_size: "5000"
+  
+  # SBE Policy Manager Configuration
+  sbe_policy_timeout: "300s"
+  supervision_workflow_timeout: "1800s"
+  emergency_override_enabled: "true"
+  
+  # Certificate Manager Configuration
+  certificate_validity_period: "8760h" # 1 year
+  fabric_ca_hospital_url: "https://ca-hospital-service.medrex-fabric.svc.cluster.local:7054"
+  fabric_ca_pharmacy_url: "https://ca-pharmacy-service.medrex-fabric.svc.cluster.local:7054"
+  
+  # Fabric Network Configuration for RBAC
+  fabric_network_config: |
+    {
+      "name": "medrex-rbac-network",
+      "version": "1.0.0",
+      "client": {
+        "organization": "HospitalOrg",
+        "connection": {
+          "timeout": {
+            "peer": {
+              "endorser": "300"
+            },
+            "orderer": "300"
+          }
+        }
+      },
+      "channels": {
+        "medrex-channel": {
+          "orderers": [
+            "orderer0.medrex.com",
+            "orderer1.medrex.com",
+            "orderer2.medrex.com"
+          ],
+          "peers": {
+            "peer0.hospital.medrex.com": {
+              "endorsingPeer": true,
+              "chaincodeQuery": true,
+              "ledgerQuery": true,
+              "eventSource": true
+            },
+            "peer1.hospital.medrex.com": {
+              "endorsingPeer": true,
+              "chaincodeQuery": true,
+              "ledgerQuery": true,
+              "eventSource": true
+            },
+            "peer0.pharmacy.medrex.com": {
+              "endorsingPeer": true,
+              "chaincodeQuery": true,
+              "ledgerQuery": true,
+              "eventSource": false
+            }
+          }
+        }
+      },
+      "organizations": {
+        "HospitalOrg": {
+          "mspid": "HospitalOrgMSP",
+          "peers": [
+            "peer0.hospital.medrex.com",
+            "peer1.hospital.medrex.com"
+          ],
+          "certificateAuthorities": [
+            "ca.hospital.medrex.com"
+          ]
+        },
+        "PharmacyOrg": {
+          "mspid": "PharmacyOrgMSP",
+          "peers": [
+            "peer0.pharmacy.medrex.com",
+            "peer1.pharmacy.medrex.com"
+          ],
+          "certificateAuthorities": [
+            "ca.pharmacy.medrex.com"
+          ]
+        }
+      },
+      "orderers": {
+        "orderer0.medrex.com": {
+          "url": "grpcs://orderer0-service.medrex-fabric.svc.cluster.local:7050",
+          "grpcOptions": {
+            "ssl-target-name-override": "orderer0.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/orderers/orderer0/tls/ca.crt"
+          }
+        },
+        "orderer1.medrex.com": {
+          "url": "grpcs://orderer1-service.medrex-fabric.svc.cluster.local:7050",
+          "grpcOptions": {
+            "ssl-target-name-override": "orderer1.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/orderers/orderer1/tls/ca.crt"
+          }
+        },
+        "orderer2.medrex.com": {
+          "url": "grpcs://orderer2-service.medrex-fabric.svc.cluster.local:7050",
+          "grpcOptions": {
+            "ssl-target-name-override": "orderer2.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/orderers/orderer2/tls/ca.crt"
+          }
+        }
+      },
+      "peers": {
+        "peer0.hospital.medrex.com": {
+          "url": "grpcs://peer0-hospital-service.medrex-fabric.svc.cluster.local:7051",
+          "grpcOptions": {
+            "ssl-target-name-override": "peer0.hospital.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt"
+          }
+        },
+        "peer1.hospital.medrex.com": {
+          "url": "grpcs://peer1-hospital-service.medrex-fabric.svc.cluster.local:7051",
+          "grpcOptions": {
+            "ssl-target-name-override": "peer1.hospital.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/peers/peer1.hospital/tls/ca.crt"
+          }
+        },
+        "peer0.pharmacy.medrex.com": {
+          "url": "grpcs://peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051",
+          "grpcOptions": {
+            "ssl-target-name-override": "peer0.pharmacy.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt"
+          }
+        },
+        "peer1.pharmacy.medrex.com": {
+          "url": "grpcs://peer1-pharmacy-service.medrex-fabric.svc.cluster.local:7051",
+          "grpcOptions": {
+            "ssl-target-name-override": "peer1.pharmacy.medrex.com"
+          },
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/peers/peer1.pharmacy/tls/ca.crt"
+          }
+        }
+      },
+      "certificateAuthorities": {
+        "ca.hospital.medrex.com": {
+          "url": "https://ca-hospital-service.medrex-fabric.svc.cluster.local:7054",
+          "caName": "ca.hospital.medrex.com",
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/cas/hospital/tls/ca.crt"
+          },
+          "httpOptions": {
+            "verify": false
+          }
+        },
+        "ca.pharmacy.medrex.com": {
+          "url": "https://ca-pharmacy-service.medrex-fabric.svc.cluster.local:7054",
+          "caName": "ca.pharmacy.medrex.com",
+          "tlsCACerts": {
+            "path": "/etc/hyperledger/fabric/cas/pharmacy/tls/ca.crt"
+          },
+          "httpOptions": {
+            "verify": false
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-policies
+  namespace: medrex-services
+  labels:
+    app: rbac-system
+    component: policies
+data:
+  role_hierarchy.yaml: |
+    roles:
+      patient:
+        id: "patient"
+        name: "Patient"
+        node_ou: "Client-Patient"
+        level: 1
+        permissions:
+          - resource: "own_ehr"
+            actions: ["read"]
+            scope: "own"
+          - resource: "appointment"
+            actions: ["create", "read", "update"]
+            scope: "own"
+          - resource: "secure_message"
+            actions: ["create", "read"]
+            scope: "own"
+      
+      mbbs_student:
+        id: "mbbs_student"
+        name: "MBBS UG Student/Intern"
+        node_ou: "Client-Trainee"
+        level: 2
+        parent: "patient"
+        permissions:
+          - resource: "training_data"
+            actions: ["read"]
+            scope: "de_identified"
+            conditions: ["read_training_data=true"]
+          - resource: "educational_content"
+            actions: ["read"]
+            scope: "all"
+      
+      md_student:
+        id: "md_student"
+        name: "MD/MS PG Student/Intern"
+        node_ou: "Client-Doctor-PG"
+        level: 3
+        parent: "mbbs_student"
+        permissions:
+          - resource: "cpoe_order"
+            actions: ["create", "read"]
+            scope: "assigned"
+            conditions: ["is_trainee=true", "requires_supervision=true"]
+          - resource: "patient_ehr"
+            actions: ["read"]
+            scope: "assigned"
+            conditions: ["supervised_access=true"]
+      
+      consulting_doctor:
+        id: "consulting_doctor"
+        name: "Consulting Doctor/Faculty"
+        node_ou: "Client-Doctor-Faculty"
+        level: 5
+        permissions:
+          - resource: "patient_ehr"
+            actions: ["create", "read", "update"]
+            scope: "assigned"
+          - resource: "cpoe_order"
+            actions: ["create", "read", "update", "approve"]
+            scope: "all"
+            conditions: ["is_supervisor=true"]
+          - resource: "clinical_notes"
+            actions: ["create", "read", "update"]
+            scope: "assigned"
+      
+      nurse:
+        id: "nurse"
+        name: "Nursing Staff"
+        node_ou: "Client-Nurse"
+        level: 4
+        permissions:
+          - resource: "medication_administration"
+            actions: ["create", "read", "update"]
+            scope: "ward"
+            conditions: ["ward_assignment=patient.ward"]
+          - resource: "vital_signs"
+            actions: ["create", "read"]
+            scope: "ward"
+          - resource: "patient_care_plan"
+            actions: ["read", "update"]
+            scope: "assigned"
+      
+      lab_technician:
+        id: "lab_technician"
+        name: "Lab Technician"
+        node_ou: "Client-LabStaff"
+        level: 3
+        permissions:
+          - resource: "lab_result"
+            actions: ["create", "read", "update"]
+            scope: "lab_org"
+            conditions: ["lab_org=user.lab_org"]
+          - resource: "lab_order"
+            actions: ["read", "update"]
+            scope: "lab_org"
+      
+      receptionist:
+        id: "receptionist"
+        name: "Receptionist/Front Desk"
+        node_ou: "Client-Admin-FrontDesk"
+        level: 2
+        permissions:
+          - resource: "patient_registration"
+            actions: ["create", "read", "update"]
+            scope: "all"
+            conditions: ["hf.Registrar.Roles=true"]
+          - resource: "appointment_scheduling"
+            actions: ["create", "read", "update", "delete"]
+            scope: "all"
+          - resource: "patient_demographics"
+            actions: ["read", "update"]
+            scope: "all"
+      
+      clinical_staff:
+        id: "clinical_staff"
+        name: "Clinical/Paraclinical Staff"
+        node_ou: "Client-Specialist"
+        level: 4
+        permissions:
+          - resource: "specialized_service"
+            actions: ["create", "read", "update"]
+            scope: "specialty"
+            conditions: ["specialty_code=user.specialty"]
+          - resource: "diagnostic_report"
+            actions: ["create", "read", "update"]
+            scope: "specialty"
+      
+      administrator:
+        id: "administrator"
+        name: "Administrative (C-Suite)"
+        node_ou: "Admin-Compliance"
+        level: 9
+        permissions:
+          - resource: "msp_config"
+            actions: ["create", "read", "update", "delete"]
+            scope: "all"
+            conditions: ["hf.Admin=true"]
+          - resource: "channel_config"
+            actions: ["create", "read", "update", "delete"]
+            scope: "all"
+          - resource: "system_audit"
+            actions: ["read"]
+            scope: "all"
+          - resource: "compliance_report"
+            actions: ["create", "read"]
+            scope: "all"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: abac-policies
+  namespace: medrex-services
+  labels:
+    app: rbac-system
+    component: abac-policies
+data:
+  ward_assignment_policy.yaml: |
+    id: "ward_assignment_policy"
+    name: "Ward Assignment Access Control"
+    rules:
+      - attribute: "ward_assignment"
+        operator: "matches"
+        value: "patient.ward"
+        required: true
+    conditions:
+      - type: "location"
+        constraint: "ward_assignment"
+        value: "assigned_ward"
+    effect: "allow"
+    priority: 100
+  
+  time_based_access_policy.yaml: |
+    id: "time_based_access_policy"
+    name: "Business Hours Access Control"
+    rules:
+      - attribute: "access_time"
+        operator: "within"
+        value: "business_hours"
+        required: true
+    conditions:
+      - type: "time"
+        constraint: "business_hours"
+        value:
+          start_time: "06:00"
+          end_time: "22:00"
+          days_of_week: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+          timezone: "UTC"
+    effect: "allow"
+    priority: 50
+  
+  specialty_access_policy.yaml: |
+    id: "specialty_access_policy"
+    name: "Clinical Specialty Access Control"
+    rules:
+      - attribute: "specialty_code"
+        operator: "equals"
+        value: "user.specialty"
+        required: true
+    conditions:
+      - type: "specialty"
+        constraint: "specialty_match"
+        value: "user_specialty"
+    effect: "allow"
+    priority: 75
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sbe-policies
+  namespace: medrex-services
+  labels:
+    app: rbac-system
+    component: sbe-policies
+data:
+  trainee_supervision_policy.yaml: |
+    id: "trainee_supervision"
+    name: "Trainee Supervision Policy"
+    resource_type: "cpoe_order"
+    trigger_conditions:
+      - attribute: "is_trainee"
+        operator: "equals"
+        value: true
+    required_endorsers:
+      - role: "consulting_doctor"
+        attributes:
+          is_supervisor: "true"
+        min_count: 1
+        max_count: 1
+    timeout_duration: "1800s"
+    escalation_policy: "supervisor_escalation"
+    emergency_override: true
+  
+  high_risk_medication_policy.yaml: |
+    id: "high_risk_medication"
+    name: "High Risk Medication Policy"
+    resource_type: "medication_order"
+    trigger_conditions:
+      - attribute: "medication_risk_level"
+        operator: "equals"
+        value: "high"
+    required_endorsers:
+      - role: "consulting_doctor"
+        attributes:
+          is_supervisor: "true"
+        min_count: 1
+        max_count: 1
+      - role: "clinical_pharmacist"
+        attributes:
+          specialty: "clinical_pharmacy"
+        min_count: 1
+        max_count: 1
+    timeout_duration: "3600s"
+    escalation_policy: "clinical_escalation"
+    emergency_override: true
+  
+  controlled_substance_policy.yaml: |
+    id: "controlled_substance"
+    name: "Controlled Substance Policy"
+    resource_type: "controlled_substance_order"
+    trigger_conditions:
+      - attribute: "substance_schedule"
+        operator: "in"
+        value: ["I", "II", "III"]
+    required_endorsers:
+      - role: "consulting_doctor"
+        attributes:
+          dea_license: "valid"
+          is_supervisor: "true"
+        min_count: 1
+        max_count: 1
+      - role: "clinical_pharmacist"
+        attributes:
+          controlled_substance_license: "valid"
+        min_count: 1
+        max_count: 1
+    timeout_duration: "7200s"
+    escalation_policy: "regulatory_escalation"
+    emergency_override: false

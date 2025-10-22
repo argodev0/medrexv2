@@ -522,13 +522,13 @@ func (s *Service) writeJSONResponse(w http.ResponseWriter, statusCode int, data 
 	w.WriteHeader(statusCode)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		s.logger.Errorf("Failed to encode JSON response: %v", err)
+		s.logger.Error("Failed to encode JSON response: %v", err)
 	}
 }
 
 // writeErrorResponse writes an error response
 func (s *Service) writeErrorResponse(w http.ResponseWriter, statusCode int, message string, err error) {
-	s.logger.Errorf("%s: %v", message, err)
+	s.logger.Error("%s: %v", message, err)
 
 	response := map[string]interface{}{
 		"error":   message,

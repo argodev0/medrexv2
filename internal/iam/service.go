@@ -1,6 +1,7 @@
 package iam
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/medrex/dlt-emr/pkg/config"
 	"github.com/medrex/dlt-emr/pkg/interfaces"
 	"github.com/medrex/dlt-emr/pkg/logger"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 	"github.com/medrex/dlt-emr/pkg/types"
 )
 
@@ -21,6 +23,9 @@ type Service struct {
 	certManager      interfaces.CertificateManager
 	mfaProvider      interfaces.MFAProvider
 	passwordManager  interfaces.PasswordManager
+	rbacEngine       rbac.RBACCoreEngine
+	abacEngine       rbac.ABACEngine
+	certManagerRBAC  rbac.CertificateManager
 	rbacManager      *RBACManager
 	certExtractor    *CertificateAttributeExtractor
 }
@@ -33,6 +38,9 @@ func NewService(
 	certManager interfaces.CertificateManager,
 	mfaProvider interfaces.MFAProvider,
 	passwordManager interfaces.PasswordManager,
+	rbacEngine rbac.RBACCoreEngine,
+	abacEngine rbac.ABACEngine,
+	certManagerRBAC rbac.CertificateManager,
 ) *Service {
 	// Initialize chaincode client
 	accessPolicyCC := NewAccessPolicyChaincodeClient(&cfg.Fabric, log)
@@ -50,12 +58,15 @@ func NewService(
 		certManager:     certManager,
 		mfaProvider:     mfaProvider,
 		passwordManager: passwordManager,
+		rbacEngine:      rbacEngine,
+		abacEngine:      abacEngine,
+		certManagerRBAC: certManagerRBAC,
 		rbacManager:     rbacManager,
 		certExtractor:   certExtractor,
 	}
 }
 
-// RegisterUser registers a new user with Fabric CA enrollment
+// RegisterUser registers a new user with Fabric CA enrollment and RBAC role assignment
 func (s *Service) RegisterUser(req *types.UserRegistrationRequest) (*types.User, error) {
 	s.logger.Info("Registering new user", "username", req.Username, "role", req.Role)
 
@@ -99,21 +110,32 @@ func (s *Service) RegisterUser(req *types.UserRegistrationRequest) (*types.User,
 		UpdatedAt:    time.Now(),
 	}
 
-	// Enroll with Fabric CA
-	cert, err := s.enrollWithFabricCA(user, req.Password)
-	if err != nil {
-		s.logger.Error("Failed to enroll with Fabric CA", "error", err, "username", req.Username)
-		return nil, fmt.Errorf("fabric CA enrollment failed: %w", err)
+	// Create RBAC enrollment request with attributes
+	enrollmentReq := &rbac.EnrollmentRequest{
+		UserID:         user.ID,
+		Role:           string(req.Role),
+		Attributes:     s.buildUserAttributes(req),
+		OrgMSP:         req.Organization + "MSP",
+		NodeOU:         s.getRoleNodeOU(string(req.Role)),
+		ValidityPeriod: time.Duration(rbac.DefaultCertificateValidity) * time.Hour,
 	}
 
-	user.Certificate = cert.Certificate
+	// Enroll with RBAC certificate manager
+	cert, err := s.certManagerRBAC.EnrollUserWithAttributes(context.Background(), enrollmentReq)
+	if err != nil {
+		s.logger.Error("Failed to enroll with RBAC certificate manager", "error", err, "username", req.Username)
+		return nil, fmt.Errorf("RBAC certificate enrollment failed: %w", err)
+	}
+
+	// Extract certificate PEM for storage
+	user.Certificate = string(cert.Raw) // This would need proper PEM encoding
 
 	// Store user in database
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	s.logger.Info("User registered successfully", "user_id", user.ID, "username", user.Username)
+	s.logger.Info("User registered successfully with RBAC integration", "user_id", user.ID, "username", user.Username, "role", req.Role)
 	return user, nil
 }
 
@@ -469,16 +491,35 @@ func (s *Service) verifyPassword(userID, password string) bool {
 }
 
 func (s *Service) generateAccessToken(user *types.User) (string, error) {
+	// Extract user attributes from certificate if available
+	userAttrs := s.extractUserAttributesFromCertificate(user.Certificate)
+	
 	claims := jwt.MapClaims{
 		"user_id":      user.ID,
 		"username":     user.Username,
-		"role":         user.Role,
+		"role":         string(user.Role),
 		"organization": user.Organization,
 		"iss":          s.config.JWT.Issuer,
 		"aud":          s.config.JWT.Audience,
 		"exp":          time.Now().Add(time.Duration(s.config.JWT.AccessTokenTTL) * time.Second).Unix(),
 		"iat":          time.Now().Unix(),
 		"nbf":          time.Now().Unix(),
+	}
+
+	// Add RBAC attributes to JWT claims
+	if userAttrs != nil {
+		if userAttrs.Specialty != "" {
+			claims["specialty"] = userAttrs.Specialty
+		}
+		if userAttrs.Department != "" {
+			claims["department"] = userAttrs.Department
+		}
+		if userAttrs.WardAssignment != "" {
+			claims["ward_assignment"] = userAttrs.WardAssignment
+		}
+		claims["is_trainee"] = userAttrs.IsTrainee
+		claims["is_supervisor"] = userAttrs.IsSupervisor
+		claims["level"] = userAttrs.Level
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -497,6 +538,183 @@ func (s *Service) generateRefreshToken(user *types.User) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.config.JWT.SecretKey))
+}
+
+// AssignRoleToUser assigns a new role to a user with certificate renewal
+func (s *Service) AssignRoleToUser(userID, newRole string, attributes map[string]string) error {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Update user role in database
+	err = s.userRepo.Update(userID, map[string]interface{}{
+		"role":       newRole,
+		"updated_at": time.Now(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update user role: %w", err)
+	}
+
+	// Renew certificate with new role attributes
+	enrollmentReq := &rbac.EnrollmentRequest{
+		UserID:         userID,
+		Role:           newRole,
+		Attributes:     attributes,
+		OrgMSP:         user.Organization + "MSP",
+		NodeOU:         s.getRoleNodeOU(newRole),
+		ValidityPeriod: time.Duration(rbac.DefaultCertificateValidity) * time.Hour,
+	}
+
+	cert, err := s.certManagerRBAC.EnrollUserWithAttributes(context.Background(), enrollmentReq)
+	if err != nil {
+		return fmt.Errorf("failed to renew certificate with new role: %w", err)
+	}
+
+	// Update certificate in database
+	err = s.userRepo.Update(userID, map[string]interface{}{
+		"certificate": string(cert.Raw),
+	})
+	if err != nil {
+		s.logger.Error("Failed to update user certificate", "error", err, "user_id", userID)
+	}
+
+	s.logger.Info("Role assigned successfully", "user_id", userID, "new_role", newRole)
+	return nil
+}
+
+// ValidateUserAccess validates user access using RBAC engine
+func (s *Service) ValidateUserAccess(userID, resourceID, action string, contextAttrs map[string]string) (bool, error) {
+	// Create RBAC access request
+	accessReq := &rbac.AccessRequest{
+		UserID:     userID,
+		ResourceID: resourceID,
+		Action:     action,
+		Context:    contextAttrs,
+		Attributes: s.getUserAttributesFromDB(userID),
+		Timestamp:  time.Now(),
+	}
+
+	// Validate access using RBAC engine
+	decision, err := s.rbacEngine.ValidateAccess(context.Background(), accessReq)
+	if err != nil {
+		return false, fmt.Errorf("RBAC validation failed: %w", err)
+	}
+
+	return decision.Allowed, nil
+}
+
+// GetUserRoles retrieves user roles from RBAC engine
+func (s *Service) GetUserRoles(userID string) ([]rbac.Role, error) {
+	return s.rbacEngine.GetUserRoles(userID)
+}
+
+// UpdateUserAttributes updates user attributes and renews certificate
+func (s *Service) UpdateUserAttributes(userID string, attributes map[string]string) error {
+	_, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Renew certificate with updated attributes
+	err = s.certManagerRBAC.RenewCertificateWithUpdatedAttributes(context.Background(), userID, attributes)
+	if err != nil {
+		return fmt.Errorf("failed to renew certificate with updated attributes: %w", err)
+	}
+
+	s.logger.Info("User attributes updated successfully", "user_id", userID)
+	return nil
+}
+
+// buildUserAttributes builds user attributes for certificate enrollment
+func (s *Service) buildUserAttributes(req *types.UserRegistrationRequest) map[string]string {
+	attributes := map[string]string{
+		"role":         string(req.Role),
+		"organization": req.Organization,
+	}
+
+	// Add role-specific attributes
+	switch req.Role {
+	case types.RoleMBBSStudent, types.RoleMDStudent:
+		attributes["is_trainee"] = "true"
+		attributes["is_supervisor"] = "false"
+	case types.RoleConsultingDoctor:
+		attributes["is_trainee"] = "false"
+		attributes["is_supervisor"] = "true"
+	default:
+		attributes["is_trainee"] = "false"
+		attributes["is_supervisor"] = "false"
+	}
+
+	// Add level based on role
+	if level, exists := rbac.RoleLevels[string(req.Role)]; exists {
+		attributes["level"] = fmt.Sprintf("%d", level)
+	}
+
+	return attributes
+}
+
+// getRoleNodeOU returns the NodeOU for a given role
+func (s *Service) getRoleNodeOU(role string) string {
+	if nodeOU, exists := rbac.NodeOUMappings[role]; exists {
+		return nodeOU
+	}
+	return "Client-Unknown"
+}
+
+// extractUserAttributesFromCertificate extracts user attributes from certificate
+func (s *Service) extractUserAttributesFromCertificate(certPEM string) *rbac.UserAttributes {
+	if certPEM == "" {
+		return nil
+	}
+
+	// Parse certificate and extract attributes
+	// This would use the RBAC certificate manager
+	// For now, return default attributes
+	return &rbac.UserAttributes{
+		Role:         "unknown",
+		IsTrainee:    false,
+		IsSupervisor: false,
+		Level:        1,
+	}
+}
+
+// getUserAttributesFromDB retrieves user attributes from database
+func (s *Service) getUserAttributesFromDB(userID string) map[string]string {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		s.logger.Error("Failed to get user for attributes", "error", err, "user_id", userID)
+		return make(map[string]string)
+	}
+
+	attributes := map[string]string{
+		"user_id":      user.ID,
+		"role":         string(user.Role),
+		"organization": user.Organization,
+	}
+
+	// Extract additional attributes from certificate if available
+	if user.Certificate != "" {
+		if userAttrs := s.extractUserAttributesFromCertificate(user.Certificate); userAttrs != nil {
+			if userAttrs.Specialty != "" {
+				attributes["specialty"] = userAttrs.Specialty
+			}
+			if userAttrs.Department != "" {
+				attributes["department"] = userAttrs.Department
+			}
+			if userAttrs.WardAssignment != "" {
+				attributes["ward_assignment"] = userAttrs.WardAssignment
+			}
+			if userAttrs.IsTrainee {
+				attributes["is_trainee"] = "true"
+			}
+			if userAttrs.IsSupervisor {
+				attributes["is_supervisor"] = "true"
+			}
+		}
+	}
+
+	return attributes
 }
 
 // Start starts the IAM service (required by interface)

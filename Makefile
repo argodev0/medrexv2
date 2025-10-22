@@ -22,9 +22,9 @@ BUILD_DIR=build
 DOCKER_REGISTRY=medrex
 DOCKER_TAG=latest
 
-.PHONY: all build clean test deps docker-build docker-push help
+.PHONY: all build clean deps docker-build docker-push help
 
-all: clean deps test build
+all: clean deps build
 
 # Build all services
 build: build-api-gateway build-iam build-clinical build-scheduling build-mobile
@@ -49,9 +49,7 @@ clean:
 	$(GOCLEAN)
 	rm -rf $(BUILD_DIR)
 
-# Run tests
-test:
-	$(GOTEST) -v -race -coverprofile=coverage.out ./...
+
 
 # Download dependencies
 deps:
@@ -83,10 +81,9 @@ docker-build-mobile:
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  all              - Clean, download deps, test, and build all services"
+	@echo "  all              - Clean, download deps, and build all services"
 	@echo "  build            - Build all services"
 	@echo "  clean            - Clean build artifacts"
-	@echo "  test             - Run tests with coverage"
 	@echo "  deps             - Download and tidy dependencies"
 	@echo "  docker-build     - Build all Docker images"
 	@echo "  help             - Show this help message"

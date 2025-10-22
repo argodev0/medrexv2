@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/medrex/dlt-emr/pkg/interfaces"
 	"github.com/medrex/dlt-emr/pkg/logger"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 )
 
 // Service implements the API Gateway
@@ -21,6 +22,7 @@ type Service struct {
 	server           *http.Server
 	rateLimiter      interfaces.RateLimiter
 	tokenValidator   interfaces.TokenValidator
+	rbacEngine       rbac.RBACCoreEngine
 	services         map[string]*url.URL
 	servicesMux      sync.RWMutex
 	logger           logger.Logger
@@ -40,10 +42,11 @@ type Config struct {
 }
 
 // NewService creates a new API Gateway service
-func NewService(config *Config, rateLimiter interfaces.RateLimiter, logger logger.Logger) *Service {
+func NewService(config *Config, rateLimiter interfaces.RateLimiter, rbacEngine rbac.RBACCoreEngine, logger logger.Logger) *Service {
 	s := &Service{
 		router:           mux.NewRouter(),
 		rateLimiter:      rateLimiter,
+		rbacEngine:       rbacEngine,
 		services:         make(map[string]*url.URL),
 		logger:           logger,
 		jwtSecret:        []byte(config.JWTSecret),
@@ -227,28 +230,30 @@ func (s *Service) extractServiceName(path string) string {
 
 // setupRoutes sets up the routing
 func (s *Service) setupRoutes() {
-	// Health check endpoints
+	// Create a subrouter for routes that need middleware
+	apiRouter := s.router.PathPrefix("").Subrouter()
+	
+	// Landing page - no middleware
+	s.router.HandleFunc("/", s.handleSimpleLandingPage).Methods("GET")
+	
+	// Health check endpoints - no middleware  
 	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
 	s.router.HandleFunc("/health/detailed", s.handleDetailedHealth).Methods("GET")
 	
-	// Metrics endpoint
+	// Metrics endpoint - no middleware
 	s.router.HandleFunc("/metrics", s.handleMetrics).Methods("GET")
 	
-	// Service management endpoints
-	s.router.HandleFunc("/admin/services", s.handleListServices).Methods("GET")
-	s.router.HandleFunc("/admin/services/{name}", s.handleRegisterService).Methods("POST")
-	s.router.HandleFunc("/admin/services/{name}", s.handleUnregisterService).Methods("DELETE")
+	// Service management endpoints - with middleware
+	apiRouter.HandleFunc("/admin/services", s.handleListServices).Methods("GET")
+	apiRouter.HandleFunc("/admin/services/{name}", s.handleRegisterService).Methods("POST")
+	apiRouter.HandleFunc("/admin/services/{name}", s.handleUnregisterService).Methods("DELETE")
 	
-	// Main API routes - all requests go through the proxy handler
-	s.router.PathPrefix("/api/v1/").HandlerFunc(s.handleProxy)
+	// Main API routes - all requests go through the proxy handler with middleware
+	apiRouter.PathPrefix("/api/v1/").HandlerFunc(s.handleProxy)
 }
 
 // setupMiddleware sets up middleware
 func (s *Service) setupMiddleware() {
-	s.router.Use(s.corsMiddleware)
-	s.router.Use(s.securityHeadersMiddleware)
-	s.router.Use(s.metricsMiddleware)
-	s.router.Use(s.loggingMiddleware)
-	s.router.Use(s.authMiddleware)
-	s.router.Use(s.rateLimitMiddleware)
+	// Apply middleware only to API routes that need it
+	// The subrouter created in setupRoutes will have these middleware
 }

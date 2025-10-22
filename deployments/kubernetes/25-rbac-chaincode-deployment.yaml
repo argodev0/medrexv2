@@ -1,0 +1,352 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rbac-chaincode-deployment
+  namespace: medrex-fabric
+  labels:
+    app: chaincode-deployment
+    component: rbac-system
+spec:
+  template:
+    metadata:
+      labels:
+        app: chaincode-deployment
+        component: rbac-system
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: chaincode-deployer
+        image: hyperledger/fabric-tools:2.5
+        env:
+        - name: FABRIC_CFG_PATH
+          value: "/etc/hyperledger/fabric"
+        - name: CORE_PEER_TLS_ENABLED
+          value: "true"
+        - name: CORE_PEER_LOCALMSPID
+          value: "HospitalOrgMSP"
+        - name: CORE_PEER_TLS_ROOTCERT_FILE
+          value: "/etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt"
+        - name: CORE_PEER_MSPCONFIGPATH
+          value: "/etc/hyperledger/fabric/users/Admin@hospital.medrex.com/msp"
+        - name: CORE_PEER_ADDRESS
+          value: "peer0-hospital-service.medrex-fabric.svc.cluster.local:7051"
+        - name: ORDERER_CA
+          value: "/etc/hyperledger/fabric/orderers/orderer0/msp/tlscacerts/tlsca.medrex.com-cert.pem"
+        - name: ORDERER_ADDRESS
+          value: "orderer0-service.medrex-fabric.svc.cluster.local:7050"
+        - name: CHANNEL_NAME
+          value: "medrex-channel"
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Starting RBAC chaincode deployment..."
+          
+          # Wait for peers to be ready
+          echo "Waiting for peers to be ready..."
+          sleep 30
+          
+          # Package AccessPolicy chaincode
+          echo "Packaging AccessPolicy chaincode..."
+          peer lifecycle chaincode package accesspolicy.tar.gz \
+            --path /opt/gopath/src/github.com/chaincode/access-policy/accesspolicy \
+            --lang golang \
+            --label accesspolicy_1.0
+          
+          # Install AccessPolicy chaincode on Hospital peers
+          echo "Installing AccessPolicy chaincode on Hospital peer0..."
+          peer lifecycle chaincode install accesspolicy.tar.gz
+          
+          # Get package ID
+          PACKAGE_ID=$(peer lifecycle chaincode queryinstalled --output json | jq -r '.installed_chaincodes[] | select(.label=="accesspolicy_1.0") | .package_id')
+          echo "AccessPolicy Package ID: $PACKAGE_ID"
+          
+          # Approve chaincode for Hospital org
+          echo "Approving AccessPolicy chaincode for Hospital org..."
+          peer lifecycle chaincode approveformyorg \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name accesspolicy \
+            --version 1.0 \
+            --package-id $PACKAGE_ID \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/accesspolicy-collections.json \
+            --signature-policy "AND('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --init-required
+          
+          # Switch to Pharmacy org context
+          export CORE_PEER_LOCALMSPID="PharmacyOrgMSP"
+          export CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt"
+          export CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/users/Admin@pharmacy.medrex.com/msp"
+          export CORE_PEER_ADDRESS="peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051"
+          
+          # Install AccessPolicy chaincode on Pharmacy peer
+          echo "Installing AccessPolicy chaincode on Pharmacy peer0..."
+          peer lifecycle chaincode install accesspolicy.tar.gz
+          
+          # Approve chaincode for Pharmacy org
+          echo "Approving AccessPolicy chaincode for Pharmacy org..."
+          peer lifecycle chaincode approveformyorg \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name accesspolicy \
+            --version 1.0 \
+            --package-id $PACKAGE_ID \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/accesspolicy-collections.json \
+            --signature-policy "AND('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --init-required
+          
+          # Check commit readiness
+          echo "Checking commit readiness for AccessPolicy chaincode..."
+          peer lifecycle chaincode checkcommitreadiness \
+            --channelID $CHANNEL_NAME \
+            --name accesspolicy \
+            --version 1.0 \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/accesspolicy-collections.json \
+            --signature-policy "AND('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --init-required \
+            --output json
+          
+          # Commit chaincode
+          echo "Committing AccessPolicy chaincode..."
+          peer lifecycle chaincode commit \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name accesspolicy \
+            --version 1.0 \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/accesspolicy-collections.json \
+            --signature-policy "AND('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --peerAddresses peer0-hospital-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt \
+            --peerAddresses peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt \
+            --init-required
+          
+          # Initialize chaincode
+          echo "Initializing AccessPolicy chaincode..."
+          peer chaincode invoke \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            -C $CHANNEL_NAME \
+            -n accesspolicy \
+            --peerAddresses peer0-hospital-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt \
+            --peerAddresses peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt \
+            --isInit \
+            -c '{"function":"InitLedger","Args":[]}'
+          
+          # Package AuditLog chaincode
+          echo "Packaging AuditLog chaincode..."
+          peer lifecycle chaincode package auditlog.tar.gz \
+            --path /opt/gopath/src/github.com/chaincode/audit-log/auditlog \
+            --lang golang \
+            --label auditlog_1.0
+          
+          # Install AuditLog chaincode on both orgs
+          echo "Installing AuditLog chaincode..."
+          
+          # Hospital org
+          export CORE_PEER_LOCALMSPID="HospitalOrgMSP"
+          export CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt"
+          export CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/users/Admin@hospital.medrex.com/msp"
+          export CORE_PEER_ADDRESS="peer0-hospital-service.medrex-fabric.svc.cluster.local:7051"
+          
+          peer lifecycle chaincode install auditlog.tar.gz
+          
+          AUDIT_PACKAGE_ID=$(peer lifecycle chaincode queryinstalled --output json | jq -r '.installed_chaincodes[] | select(.label=="auditlog_1.0") | .package_id')
+          echo "AuditLog Package ID: $AUDIT_PACKAGE_ID"
+          
+          peer lifecycle chaincode approveformyorg \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name auditlog \
+            --version 1.0 \
+            --package-id $AUDIT_PACKAGE_ID \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/auditlog-collections.json \
+            --signature-policy "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --init-required
+          
+          # Pharmacy org
+          export CORE_PEER_LOCALMSPID="PharmacyOrgMSP"
+          export CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt"
+          export CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/users/Admin@pharmacy.medrex.com/msp"
+          export CORE_PEER_ADDRESS="peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051"
+          
+          peer lifecycle chaincode install auditlog.tar.gz
+          
+          peer lifecycle chaincode approveformyorg \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name auditlog \
+            --version 1.0 \
+            --package-id $AUDIT_PACKAGE_ID \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/auditlog-collections.json \
+            --signature-policy "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --init-required
+          
+          # Commit AuditLog chaincode
+          echo "Committing AuditLog chaincode..."
+          peer lifecycle chaincode commit \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            --channelID $CHANNEL_NAME \
+            --name auditlog \
+            --version 1.0 \
+            --sequence 1 \
+            --collections-config /etc/chaincode-config/auditlog-collections.json \
+            --signature-policy "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')" \
+            --peerAddresses peer0-hospital-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt \
+            --peerAddresses peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt \
+            --init-required
+          
+          # Initialize AuditLog chaincode
+          echo "Initializing AuditLog chaincode..."
+          peer chaincode invoke \
+            -o $ORDERER_ADDRESS \
+            --ordererTLSHostnameOverride orderer0.medrex.com \
+            --tls \
+            --cafile $ORDERER_CA \
+            -C $CHANNEL_NAME \
+            -n auditlog \
+            --peerAddresses peer0-hospital-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.hospital/tls/ca.crt \
+            --peerAddresses peer0-pharmacy-service.medrex-fabric.svc.cluster.local:7051 \
+            --tlsRootCertFiles /etc/hyperledger/fabric/peers/peer0.pharmacy/tls/ca.crt \
+            --isInit \
+            -c '{"function":"InitLedger","Args":[]}'
+          
+          echo "RBAC chaincode deployment completed successfully!"
+          
+        volumeMounts:
+        - name: fabric-config
+          mountPath: /etc/hyperledger/fabric
+          readOnly: true
+        - name: chaincode-source
+          mountPath: /opt/gopath/src/github.com/chaincode
+          readOnly: true
+        - name: chaincode-config
+          mountPath: /etc/chaincode-config
+          readOnly: true
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: fabric-config
+        secret:
+          secretName: fabric-crypto-material
+      - name: chaincode-source
+        configMap:
+          name: rbac-chaincode-source
+      - name: chaincode-config
+        configMap:
+          name: rbac-chaincode-collections
+  backoffLimit: 3
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-chaincode-collections
+  namespace: medrex-fabric
+  labels:
+    app: rbac-chaincode
+    component: collections
+data:
+  accesspolicy-collections.json: |
+    [
+      {
+        "name": "rbac_policies",
+        "policy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')",
+        "requiredPeerCount": 1,
+        "maxPeerCount": 3,
+        "blockToLive": 0,
+        "memberOnlyRead": true,
+        "memberOnlyWrite": false,
+        "endorsementPolicy": {
+          "signaturePolicy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+        }
+      },
+      {
+        "name": "sbe_policies",
+        "policy": "OR('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')",
+        "requiredPeerCount": 1,
+        "maxPeerCount": 2,
+        "blockToLive": 0,
+        "memberOnlyRead": true,
+        "memberOnlyWrite": true,
+        "endorsementPolicy": {
+          "signaturePolicy": "AND('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')"
+        }
+      },
+      {
+        "name": "supervision_workflows",
+        "policy": "OR('HospitalOrgMSP.member')",
+        "requiredPeerCount": 1,
+        "maxPeerCount": 2,
+        "blockToLive": 1000,
+        "memberOnlyRead": false,
+        "memberOnlyWrite": true,
+        "endorsementPolicy": {
+          "signaturePolicy": "OR('HospitalOrgMSP.member')"
+        }
+      }
+    ]
+  
+  auditlog-collections.json: |
+    [
+      {
+        "name": "audit_entries",
+        "policy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')",
+        "requiredPeerCount": 2,
+        "maxPeerCount": 3,
+        "blockToLive": 0,
+        "memberOnlyRead": false,
+        "memberOnlyWrite": false,
+        "endorsementPolicy": {
+          "signaturePolicy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+        }
+      },
+      {
+        "name": "compliance_logs",
+        "policy": "OR('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')",
+        "requiredPeerCount": 1,
+        "maxPeerCount": 2,
+        "blockToLive": 0,
+        "memberOnlyRead": true,
+        "memberOnlyWrite": true,
+        "endorsementPolicy": {
+          "signaturePolicy": "AND('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')"
+        }
+      }
+    ]

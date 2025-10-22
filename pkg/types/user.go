@@ -32,11 +32,17 @@ type User struct {
 
 // UserClaims represents JWT token claims
 type UserClaims struct {
-	UserID      string   `json:"user_id"`
-	Username    string   `json:"username"`
-	Role        UserRole `json:"role"`
-	OrgID       string   `json:"org_id"`
-	Permissions []string `json:"permissions"`
+	UserID         string   `json:"user_id"`
+	Username       string   `json:"username"`
+	Role           UserRole `json:"role"`
+	OrgID          string   `json:"org_id"`
+	Permissions    []string `json:"permissions"`
+	Specialty      string   `json:"specialty,omitempty"`
+	Department     string   `json:"department,omitempty"`
+	WardAssignment string   `json:"ward_assignment,omitempty"`
+	IsTrainee      bool     `json:"is_trainee,omitempty"`
+	IsSupervisor   bool     `json:"is_supervisor,omitempty"`
+	Level          int      `json:"level,omitempty"`
 }
 
 // UserRegistrationRequest represents user registration data

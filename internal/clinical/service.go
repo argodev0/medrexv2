@@ -8,6 +8,7 @@ import (
 	"github.com/medrex/dlt-emr/pkg/encryption"
 	"github.com/medrex/dlt-emr/pkg/interfaces"
 	"github.com/medrex/dlt-emr/pkg/logger"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 	"github.com/medrex/dlt-emr/pkg/repository"
 	"github.com/medrex/dlt-emr/pkg/types"
 )
@@ -19,6 +20,8 @@ type ClinicalNotesService struct {
 	encryptionSvc   interfaces.EncryptionService
 	blockchainClient interfaces.BlockchainClient
 	preService      *encryption.PREService
+	rbacEngine      rbac.RBACCoreEngine
+	auditLogger     rbac.AuditLogger
 	logger          logger.Logger
 }
 
@@ -29,6 +32,8 @@ func NewClinicalNotesService(
 	encSvc interfaces.EncryptionService,
 	bcClient interfaces.BlockchainClient,
 	preService *encryption.PREService,
+	rbacEngine rbac.RBACCoreEngine,
+	auditLogger rbac.AuditLogger,
 	logger logger.Logger,
 ) *ClinicalNotesService {
 	return &ClinicalNotesService{
@@ -37,6 +42,8 @@ func NewClinicalNotesService(
 		encryptionSvc:   encSvc,
 		blockchainClient: bcClient,
 		preService:      preService,
+		rbacEngine:      rbacEngine,
+		auditLogger:     auditLogger,
 		logger:          logger,
 	}
 }
@@ -47,10 +54,13 @@ func (s *ClinicalNotesService) CreateNote(note *types.ClinicalNote, userID strin
 	
 	s.logger.Info("Creating clinical note", "patientID", note.PatientID, "userID", userID)
 
-	// Validate access via AccessPolicy chaincode
-	allowed, err := s.blockchainClient.CheckAccess(userID, note.PatientID, "create_note")
+	// Validate access using RBAC engine
+	allowed, err := s.validateRBACAccess(ctx, userID, rbac.ResourceClinicalNote+":"+note.PatientID, rbac.ActionCreate, map[string]string{
+		"patient_id": note.PatientID,
+		"note_type":  note.NoteType,
+	})
 	if err != nil {
-		s.logger.Error("Failed to check access", "error", err)
+		s.logger.Error("Failed to validate RBAC access", "error", err)
 		return nil, fmt.Errorf("access validation failed: %w", err)
 	}
 
@@ -1006,4 +1016,143 @@ func (s *ClinicalNotesService) ValidateDataIntegrityBatch(noteIDs []string, user
 	}
 
 	return results, nil
+}
+
+// validateRBACAccess validates access using the RBAC engine
+func (s *ClinicalNotesService) validateRBACAccess(ctx context.Context, userID, resourceID, action string, attributes map[string]string) (bool, error) {
+	// Create RBAC access request
+	accessReq := &rbac.AccessRequest{
+		UserID:     userID,
+		ResourceID: resourceID,
+		Action:     action,
+		Context: map[string]string{
+			"service": "clinical-notes",
+		},
+		Attributes: attributes,
+		Timestamp:  time.Now(),
+	}
+
+	// Validate access using RBAC engine
+	decision, err := s.rbacEngine.ValidateAccess(ctx, accessReq)
+	if err != nil {
+		return false, err
+	}
+
+	// Log access attempt using RBAC audit logger
+	if s.auditLogger != nil {
+		auditErr := s.auditLogger.LogAccessAttempt(ctx, accessReq, decision)
+		if auditErr != nil {
+			s.logger.Error("Failed to log access attempt", "error", auditErr)
+		}
+	}
+
+	return decision.Allowed, nil
+}
+
+// extractUserAttributesFromHeaders extracts user attributes from HTTP headers
+func (s *ClinicalNotesService) extractUserAttributesFromHeaders(headers map[string]string) map[string]string {
+	attributes := make(map[string]string)
+
+	// Extract RBAC attributes from headers set by API Gateway
+	if rbacAttrs := headers["X-RBAC-Attributes"]; rbacAttrs != "" {
+		// Parse JSON attributes
+		// This would be implemented to parse the JSON string
+		// For now, return basic attributes
+	}
+
+	if role := headers["X-RBAC-Role"]; role != "" {
+		attributes["role"] = role
+	}
+
+	if scope := headers["X-RBAC-Scope"]; scope != "" {
+		attributes["scope"] = scope
+	}
+
+	return attributes
+}
+
+// ValidatePatientAssignment validates if a user has access to a specific patient
+func (s *ClinicalNotesService) ValidatePatientAssignment(ctx context.Context, userID, patientID string) (bool, error) {
+	// Create RBAC access request for patient assignment validation
+	accessReq := &rbac.AccessRequest{
+		UserID:     userID,
+		ResourceID: rbac.ResourcePatientEHR + ":" + patientID,
+		Action:     rbac.ActionRead,
+		Context: map[string]string{
+			"service":      "clinical-notes",
+			"validation":   "patient_assignment",
+		},
+		Attributes: map[string]string{
+			"patient_id": patientID,
+		},
+		Timestamp: time.Now(),
+	}
+
+	// Validate access using RBAC engine
+	decision, err := s.rbacEngine.ValidateAccess(ctx, accessReq)
+	if err != nil {
+		return false, fmt.Errorf("patient assignment validation failed: %w", err)
+	}
+
+	// Log patient assignment validation
+	if s.auditLogger != nil {
+		auditErr := s.auditLogger.LogAccessAttempt(ctx, accessReq, decision)
+		if auditErr != nil {
+			s.logger.Error("Failed to log patient assignment validation", "error", auditErr)
+		}
+	}
+
+	return decision.Allowed, nil
+}
+
+// LogPHIAccess logs PHI access attempts for audit purposes
+func (s *ClinicalNotesService) LogPHIAccess(ctx context.Context, userID, resourceID, action string, success bool, details map[string]interface{}) error {
+	if s.auditLogger == nil {
+		return nil
+	}
+
+	// Create audit entry for PHI access
+	auditEntry := &rbac.AuditEntry{
+		ID:         fmt.Sprintf("phi_%s_%d", resourceID, time.Now().Unix()),
+		EventType:  rbac.AuditEventAccessAttempt,
+		UserID:     userID,
+		ResourceID: resourceID,
+		Action:     action,
+		Result:     getResultString(success),
+		Timestamp:  time.Now(),
+		Metadata:   details,
+	}
+
+	// Create audit filter for PHI access (for future use)
+	_ = &rbac.AuditFilter{
+		UserID:     userID,
+		ResourceID: resourceID,
+		Action:     action,
+		StartTime:  time.Now().Add(-1 * time.Hour), // Look back 1 hour
+		EndTime:    time.Now(),
+		Limit:      1,
+	}
+
+	// Log the audit entry (for future use)
+	_ = []*rbac.AuditEntry{auditEntry}
+	
+	// This would typically use the audit logger's method to store entries
+	// For now, we'll log it as an info message
+	s.logger.Info("PHI access logged", 
+		"user_id", userID,
+		"resource_id", resourceID,
+		"action", action,
+		"success", success,
+		"details", details,
+	)
+
+	return nil
+}
+
+// getResultString converts boolean success to string result
+func getResultString(success bool) string {
+	if success {
+		return "success"
+	}
+	return "failure"
 }

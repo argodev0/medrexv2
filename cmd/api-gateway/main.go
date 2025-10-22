@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	"github.com/medrex/dlt-emr/internal/gateway"
 	"github.com/medrex/dlt-emr/pkg/config"
 	"github.com/medrex/dlt-emr/pkg/logger"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 
 	// Create gateway configuration
 	gatewayConfig := &gateway.Config{
-		Port:         getEnvOrDefault("GATEWAY_PORT", "8080"),
+		Port:         getEnvOrDefault("PORT", "8080"),
 		JWTSecret:    getEnvOrDefault("JWT_SECRET", "your-secret-key"),
 		RateLimit:    100, // 100 requests per period
 		RatePeriod:   time.Minute,
@@ -36,8 +38,11 @@ func main() {
 	rateLimiter := gateway.NewRateLimiter(gatewayConfig.RateLimit, gatewayConfig.RatePeriod)
 	rateLimiter.StartCleanup(time.Hour) // Cleanup every hour
 
+	// Create a mock RBAC engine for development (no database required)
+	rbacEngine := &MockRBACEngine{}
+
 	// Create and configure the gateway service
-	gatewayService := gateway.NewService(gatewayConfig, rateLimiter, logger)
+	gatewayService := gateway.NewService(gatewayConfig, rateLimiter, rbacEngine, logger)
 
 	// Register default services (these would typically come from service discovery)
 	registerDefaultServices(gatewayService, logger)
@@ -92,3 +97,42 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
+
+// MockRBACEngine is a simple mock implementation for development
+type MockRBACEngine struct{}
+
+func (m *MockRBACEngine) ValidateAccess(ctx context.Context, req *rbac.AccessRequest) (*rbac.AccessDecision, error) {
+	// Always allow access for development
+	return &rbac.AccessDecision{
+		Allowed:    true,
+		Reason:     "Mock RBAC - always allow",
+		Conditions: nil,
+		TTL:        time.Hour,
+	}, nil
+}
+
+func (m *MockRBACEngine) GetUserRoles(userID string) ([]rbac.Role, error) {
+	// Return a default role
+	return []rbac.Role{
+		{
+			ID:          "admin",
+			Name:        "Administrator",
+			NodeOU:      "admin",
+			Level:       1,
+			Permissions: []string{"*"},
+		},
+	}, nil
+}
+
+func (m *MockRBACEngine) GetRolePermissions(role rbac.Role) ([]rbac.Permission, error) {
+	return []rbac.Permission{}, nil
+}
+
+func (m *MockRBACEngine) UpdateRoleHierarchy(hierarchy *rbac.RoleHierarchy) error {
+	return nil
+}
+
+func (m *MockRBACEngine) CachePolicy(policyID string, policy *rbac.AccessPolicy) error {
+	return nil
+}
+

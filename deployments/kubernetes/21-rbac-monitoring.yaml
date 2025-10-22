@@ -1,0 +1,282 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rbac-monitoring
+  namespace: medrex-services
+  labels:
+    app: rbac-monitoring
+    component: rbac-system
+    tier: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rbac-monitoring
+  template:
+    metadata:
+      labels:
+        app: rbac-monitoring
+        component: rbac-system
+        tier: monitoring
+    spec:
+      containers:
+      - name: rbac-monitoring
+        image: medrex/rbac-monitoring:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: metrics
+        env:
+        - name: PORT
+          value: "8080"
+        - name: METRICS_PORT
+          value: "8081"
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_host
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_port
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: database_name
+        - name: DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_username
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medrex-secrets
+              key: database_password
+        - name: RBAC_CORE_ENGINE_ENDPOINT
+          value: "rbac-core-engine-service.medrex-services.svc.cluster.local:9090"
+        - name: ALERT_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-secrets
+              key: alert_webhook_url
+        - name: PROMETHEUS_ENDPOINT
+          value: "http://prometheus-service.medrex-monitoring.svc.cluster.local:9090"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: log_level
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medrex-config
+              key: environment
+        volumeMounts:
+        - name: monitoring-config
+          mountPath: /etc/monitoring
+          readOnly: true
+        - name: alert-rules
+          mountPath: /etc/alerts
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: monitoring-config
+        configMap:
+          name: rbac-monitoring-config
+      - name: alert-rules
+        configMap:
+          name: rbac-alert-rules
+      securityContext:
+        fsGroup: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rbac-monitoring-service
+  namespace: medrex-services
+  labels:
+    app: rbac-monitoring
+    component: rbac-system
+spec:
+  selector:
+    app: rbac-monitoring
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-monitoring-config
+  namespace: medrex-services
+  labels:
+    app: rbac-monitoring
+    component: configuration
+data:
+  monitoring.yaml: |
+    monitoring:
+      metrics:
+        collection_interval: "30s"
+        retention_period: "7d"
+      
+      performance:
+        decision_latency_threshold: "100ms"
+        cache_hit_ratio_threshold: 0.85
+        error_rate_threshold: 0.01
+      
+      security:
+        failed_access_threshold: 10
+        suspicious_activity_threshold: 5
+        anomaly_detection_enabled: true
+      
+      alerts:
+        channels:
+          - type: "webhook"
+            endpoint: "${ALERT_WEBHOOK_URL}"
+          - type: "email"
+            smtp_server: "smtp.medrex.com:587"
+            recipients: ["security@medrex.com", "ops@medrex.com"]
+        
+        rules:
+          - name: "high_access_denial_rate"
+            condition: "access_denial_rate > 0.1"
+            severity: "warning"
+            duration: "5m"
+          
+          - name: "rbac_service_down"
+            condition: "up{job='rbac-core-engine'} == 0"
+            severity: "critical"
+            duration: "1m"
+          
+          - name: "certificate_expiry_warning"
+            condition: "certificate_expiry_days < 30"
+            severity: "warning"
+            duration: "1h"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-alert-rules
+  namespace: medrex-services
+  labels:
+    app: rbac-monitoring
+    component: alert-rules
+data:
+  rbac_alerts.yaml: |
+    groups:
+    - name: rbac_system_alerts
+      rules:
+      - alert: RBACServiceDown
+        expr: up{job="rbac-core-engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: rbac-core-engine
+        annotations:
+          summary: "RBAC Core Engine is down"
+          description: "RBAC Core Engine has been down for more than 1 minute"
+      
+      - alert: HighAccessDenialRate
+        expr: rate(rbac_access_denied_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: rbac-system
+        annotations:
+          summary: "High access denial rate detected"
+          description: "Access denial rate is {{ $value }} per second"
+      
+      - alert: ABACEvaluationTimeout
+        expr: rate(abac_evaluation_timeout_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          service: abac-engine
+        annotations:
+          summary: "ABAC evaluation timeouts detected"
+          description: "ABAC evaluation timeout rate is {{ $value }} per second"
+      
+      - alert: SBEPolicyViolation
+        expr: rate(sbe_policy_violation_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: sbe-policy-manager
+        annotations:
+          summary: "SBE policy violations detected"
+          description: "SBE policy violation rate is {{ $value }} per second"
+      
+      - alert: CertificateExpiryWarning
+        expr: certificate_expiry_days < 30
+        for: 1h
+        labels:
+          severity: warning
+          service: certificate-manager
+        annotations:
+          summary: "Certificate expiring soon"
+          description: "Certificate {{ $labels.certificate_id }} expires in {{ $value }} days"
+      
+      - alert: SuspiciousActivityDetected
+        expr: rate(rbac_suspicious_activity_total[10m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: rbac-monitoring
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious activity rate is {{ $value }} per second"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: monitoring-secrets
+  namespace: medrex-services
+  labels:
+    app: rbac-monitoring
+    component: secrets
+type: Opaque
+data:
+  # Base64 encoded webhook URL for alerts
+  alert_webhook_url: aHR0cHM6Ly9ob29rcy5zbGFjay5jb20vc2VydmljZXMvVDAwMDAwMDAwL0IwMDAwMDAwMC9YWFhYWFhYWFhYWFhYWFhYWFhYWFhY # placeholder

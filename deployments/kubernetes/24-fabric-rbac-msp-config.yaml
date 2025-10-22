@@ -1,0 +1,303 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hospital-msp-rbac-config
+  namespace: medrex-fabric
+  labels:
+    app: fabric-msp
+    org: hospital
+    component: rbac-config
+data:
+  config.yaml: |
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: orderer
+      # RBAC-specific NodeOU identifiers
+      RBACNodeOUs:
+        # Patient role
+        PatientOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Patient
+        # Trainee roles
+        TraineeOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Trainee
+        DoctorPGOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Doctor-PG
+        # Faculty and staff roles
+        DoctorFacultyOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Doctor-Faculty
+        NurseOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Nurse
+        LabStaffOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-LabStaff
+        SpecialistOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Specialist
+        # Administrative roles
+        AdminFrontDeskOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Admin-FrontDesk
+        AdminComplianceOUIdentifier:
+          Certificate: cacerts/ca.hospital.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Admin-Compliance
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pharmacy-msp-rbac-config
+  namespace: medrex-fabric
+  labels:
+    app: fabric-msp
+    org: pharmacy
+    component: rbac-config
+data:
+  config.yaml: |
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+        OrganizationalUnitIdentifier: orderer
+      # RBAC-specific NodeOU identifiers for Pharmacy
+      RBACNodeOUs:
+        # Pharmacy staff roles
+        PharmacistOUIdentifier:
+          Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-Pharmacist
+        PharmacyTechOUIdentifier:
+          Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-PharmacyTech
+        ClinicalPharmacistOUIdentifier:
+          Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Client-ClinicalPharmacist
+        # Administrative roles
+        PharmacyAdminOUIdentifier:
+          Certificate: cacerts/ca.pharmacy.medrex.com-cert.pem
+          OrganizationalUnitIdentifier: Admin-Pharmacy
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rbac-chaincode-config
+  namespace: medrex-fabric
+  labels:
+    app: rbac-chaincode
+    component: configuration
+data:
+  # AccessPolicy chaincode configuration
+  accesspolicy-config.yaml: |
+    chaincode:
+      name: "accesspolicy"
+      version: "1.0"
+      sequence: 1
+      endorsement_policy: "AND('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+      collection_config: |
+        [
+          {
+            "name": "rbac_policies",
+            "policy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')",
+            "requiredPeerCount": 1,
+            "maxPeerCount": 3,
+            "blockToLive": 0,
+            "memberOnlyRead": true,
+            "memberOnlyWrite": false,
+            "endorsementPolicy": {
+              "signaturePolicy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+            }
+          },
+          {
+            "name": "sbe_policies",
+            "policy": "OR('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')",
+            "requiredPeerCount": 1,
+            "maxPeerCount": 2,
+            "blockToLive": 0,
+            "memberOnlyRead": true,
+            "memberOnlyWrite": true,
+            "endorsementPolicy": {
+              "signaturePolicy": "AND('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')"
+            }
+          },
+          {
+            "name": "supervision_workflows",
+            "policy": "OR('HospitalOrgMSP.member')",
+            "requiredPeerCount": 1,
+            "maxPeerCount": 2,
+            "blockToLive": 1000,
+            "memberOnlyRead": false,
+            "memberOnlyWrite": true,
+            "endorsementPolicy": {
+              "signaturePolicy": "OR('HospitalOrgMSP.member')"
+            }
+          }
+        ]
+      init_required: true
+      
+  # AuditLog chaincode configuration  
+  auditlog-config.yaml: |
+    chaincode:
+      name: "auditlog"
+      version: "1.0"
+      sequence: 1
+      endorsement_policy: "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+      collection_config: |
+        [
+          {
+            "name": "audit_entries",
+            "policy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')",
+            "requiredPeerCount": 2,
+            "maxPeerCount": 3,
+            "blockToLive": 0,
+            "memberOnlyRead": false,
+            "memberOnlyWrite": false,
+            "endorsementPolicy": {
+              "signaturePolicy": "OR('HospitalOrgMSP.member','PharmacyOrgMSP.member')"
+            }
+          },
+          {
+            "name": "compliance_logs",
+            "policy": "OR('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')",
+            "requiredPeerCount": 1,
+            "maxPeerCount": 2,
+            "blockToLive": 0,
+            "memberOnlyRead": true,
+            "memberOnlyWrite": true,
+            "endorsementPolicy": {
+              "signaturePolicy": "AND('HospitalOrgMSP.admin','PharmacyOrgMSP.admin')"
+            }
+          }
+        ]
+      init_required: true
+      
+  # State-Based Endorsement policies for RBAC
+  sbe-policies.yaml: |
+    policies:
+      # Trainee supervision policy
+      trainee_cpoe_supervision:
+        key_pattern: "CPOE:*"
+        endorsement_policy: |
+          {
+            "identities": [
+              {
+                "principal": {
+                  "msp_identifier": "HospitalOrgMSP",
+                  "role": "MEMBER"
+                },
+                "principal_classification": "ROLE"
+              }
+            ],
+            "policy": {
+              "1-of": [
+                {
+                  "signed_by": 0
+                }
+              ]
+            }
+          }
+        conditions:
+          - attribute: "is_trainee"
+            value: "true"
+        required_attributes:
+          - "is_supervisor=true"
+          - "role=consulting_doctor"
+          
+      # High-risk medication policy
+      high_risk_medication:
+        key_pattern: "MEDICATION:HIGH_RISK:*"
+        endorsement_policy: |
+          {
+            "identities": [
+              {
+                "principal": {
+                  "msp_identifier": "HospitalOrgMSP",
+                  "role": "MEMBER"
+                },
+                "principal_classification": "ROLE"
+              },
+              {
+                "principal": {
+                  "msp_identifier": "PharmacyOrgMSP",
+                  "role": "MEMBER"
+                },
+                "principal_classification": "ROLE"
+              }
+            ],
+            "policy": {
+              "2-of": [
+                {
+                  "signed_by": 0
+                },
+                {
+                  "signed_by": 1
+                }
+              ]
+            }
+          }
+        conditions:
+          - attribute: "medication_risk_level"
+            value: "high"
+        required_attributes:
+          - "is_supervisor=true"
+          - "clinical_pharmacist=true"
+          
+      # Controlled substance policy
+      controlled_substance:
+        key_pattern: "CONTROLLED_SUBSTANCE:*"
+        endorsement_policy: |
+          {
+            "identities": [
+              {
+                "principal": {
+                  "msp_identifier": "HospitalOrgMSP",
+                  "role": "ADMIN"
+                },
+                "principal_classification": "ROLE"
+              },
+              {
+                "principal": {
+                  "msp_identifier": "PharmacyOrgMSP",
+                  "role": "ADMIN"
+                },
+                "principal_classification": "ROLE"
+              }
+            ],
+            "policy": {
+              "2-of": [
+                {
+                  "signed_by": 0
+                },
+                {
+                  "signed_by": 1
+                }
+              ]
+            }
+          }
+        conditions:
+          - attribute: "substance_schedule"
+            value: ["I", "II", "III"]
+        required_attributes:
+          - "dea_license=valid"
+          - "controlled_substance_license=valid"

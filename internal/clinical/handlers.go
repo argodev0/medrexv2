@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/medrex/dlt-emr/pkg/logger"
+	"github.com/medrex/dlt-emr/pkg/rbac"
 	"github.com/medrex/dlt-emr/pkg/types"
 )
 
@@ -77,9 +78,26 @@ func (h *Handlers) CreateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get RBAC attributes from headers
+	rbacAttrs := h.getRBACAttributes(r)
+	
+	// Add RBAC attributes to note context
+	note.Metadata = make(map[string]string)
+	for key, value := range rbacAttrs {
+		note.Metadata["rbac_"+key] = value
+	}
+
 	createdNote, err := h.service.CreateNote(&note, userID)
 	if err != nil {
 		h.logger.Error("Failed to create note", "error", err, "userID", userID)
+		
+		// Handle RBAC-specific errors
+		if rbacErr, ok := err.(*rbac.RBACError); ok {
+			statusCode := h.getRBACErrorStatusCode(rbacErr.Type)
+			h.writeError(w, statusCode, string(rbacErr.Type), rbacErr.Message)
+			return
+		}
+		
 		h.writeError(w, http.StatusInternalServerError, "creation_failed", err.Error())
 		return
 	}
@@ -447,10 +465,12 @@ func (h *Handlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // getUserID extracts user ID from request context or headers
 func (h *Handlers) getUserID(r *http.Request) string {
-	// In a real implementation, this would extract the user ID from JWT token
-	// or request context set by authentication middleware
-	
-	// For now, check the X-User-ID header
+	// Check RBAC headers first (set by API Gateway RBAC middleware)
+	if userID := r.Header.Get("X-RBAC-User-ID"); userID != "" {
+		return userID
+	}
+
+	// Check the X-User-ID header
 	if userID := r.Header.Get("X-User-ID"); userID != "" {
 		return userID
 	}
@@ -463,6 +483,54 @@ func (h *Handlers) getUserID(r *http.Request) string {
 	}
 
 	return ""
+}
+
+// getRBACAttributes extracts RBAC attributes from request headers
+func (h *Handlers) getRBACAttributes(r *http.Request) map[string]string {
+	attributes := make(map[string]string)
+
+	// Extract RBAC information set by API Gateway
+	if role := r.Header.Get("X-RBAC-Role"); role != "" {
+		attributes["role"] = role
+	}
+
+	if scope := r.Header.Get("X-RBAC-Scope"); scope != "" {
+		attributes["scope"] = scope
+	}
+
+	if conditions := r.Header.Get("X-RBAC-Conditions"); conditions != "" {
+		attributes["conditions"] = conditions
+	}
+
+	if rbacAttrs := r.Header.Get("X-RBAC-Attributes"); rbacAttrs != "" {
+		attributes["rbac_attributes"] = rbacAttrs
+	}
+
+	return attributes
+}
+
+// getRBACErrorStatusCode maps RBAC error types to HTTP status codes
+func (h *Handlers) getRBACErrorStatusCode(errorType rbac.RBACErrorType) int {
+	switch errorType {
+	case rbac.ErrorTypeInsufficientPrivileges:
+		return http.StatusForbidden
+	case rbac.ErrorTypeInvalidRole:
+		return http.StatusUnauthorized
+	case rbac.ErrorTypeAttributeValidation:
+		return http.StatusBadRequest
+	case rbac.ErrorTypeSupervisionRequired:
+		return http.StatusPreconditionRequired
+	case rbac.ErrorTypeCertificateInvalid:
+		return http.StatusUnauthorized
+	case rbac.ErrorTypePolicyViolation:
+		return http.StatusForbidden
+	case rbac.ErrorTypeTimeRestriction:
+		return http.StatusForbidden
+	case rbac.ErrorTypeEmergencyOverride:
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // writeJSON writes JSON response

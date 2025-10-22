@@ -15,11 +15,11 @@ import (
 // Repository implements the SchedulingRepository interface
 type Repository struct {
 	db     *database.DB
-	logger *logger.Logger
+	logger logger.Logger
 }
 
 // NewRepository creates a new scheduling repository
-func NewRepository(db *database.DB, log *logger.Logger) interfaces.SchedulingRepository {
+func NewRepository(db *database.DB, log logger.Logger) interfaces.SchedulingRepository {
 	return &Repository{
 		db:     db,
 		logger: log,
@@ -49,11 +49,11 @@ func (r *Repository) CreateAppointment(apt *types.Appointment) error {
 	)
 
 	if err != nil {
-		r.logger.Errorf("Failed to create appointment: %v", err)
+		r.logger.Error("Failed to create appointment: %v", err)
 		return fmt.Errorf("failed to create appointment: %w", err)
 	}
 
-	r.logger.Infof("Created appointment %s for patient %s with provider %s", apt.ID, apt.PatientID, apt.ProviderID)
+	r.logger.Info("Created appointment %s for patient %s with provider %s", apt.ID, apt.PatientID, apt.ProviderID)
 	return nil
 }
 
@@ -82,7 +82,7 @@ func (r *Repository) GetAppointmentByID(id string) (*types.Appointment, error) {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("appointment not found: %s", id)
 		}
-		r.logger.Errorf("Failed to get appointment %s: %v", id, err)
+		r.logger.Error("Failed to get appointment %s: %v", id, err)
 		return nil, fmt.Errorf("failed to get appointment: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func (r *Repository) UpdateAppointment(id string, updates *types.AppointmentUpda
 
 	result, err := r.db.Exec(query, args...)
 	if err != nil {
-		r.logger.Errorf("Failed to update appointment %s: %v", id, err)
+		r.logger.Error("Failed to update appointment %s: %v", id, err)
 		return fmt.Errorf("failed to update appointment: %w", err)
 	}
 
@@ -145,7 +145,7 @@ func (r *Repository) UpdateAppointment(id string, updates *types.AppointmentUpda
 		return fmt.Errorf("appointment not found: %s", id)
 	}
 
-	r.logger.Infof("Updated appointment %s", id)
+	r.logger.Info("Updated appointment %s", id)
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (r *Repository) DeleteAppointment(id string) error {
 
 	result, err := r.db.Exec(query, time.Now(), id)
 	if err != nil {
-		r.logger.Errorf("Failed to delete appointment %s: %v", id, err)
+		r.logger.Error("Failed to delete appointment %s: %v", id, err)
 		return fmt.Errorf("failed to delete appointment: %w", err)
 	}
 
@@ -168,7 +168,7 @@ func (r *Repository) DeleteAppointment(id string) error {
 		return fmt.Errorf("appointment not found: %s", id)
 	}
 
-	r.logger.Infof("Deleted appointment %s", id)
+	r.logger.Info("Deleted appointment %s", id)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func (r *Repository) GetAppointments(filters *types.AppointmentFilters) ([]*type
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		r.logger.Errorf("Failed to get appointments: %v", err)
+		r.logger.Error("Failed to get appointments: %v", err)
 		return nil, fmt.Errorf("failed to get appointments: %w", err)
 	}
 	defer rows.Close()
@@ -254,7 +254,7 @@ func (r *Repository) GetAppointments(filters *types.AppointmentFilters) ([]*type
 			&apt.UpdatedAt,
 		)
 		if err != nil {
-			r.logger.Errorf("Failed to scan appointment: %v", err)
+			r.logger.Error("Failed to scan appointment: %v", err)
 			return nil, fmt.Errorf("failed to scan appointment: %w", err)
 		}
 		appointments = append(appointments, apt)
@@ -283,11 +283,11 @@ func (r *Repository) CreateProvider(provider *types.Provider) error {
 	)
 
 	if err != nil {
-		r.logger.Errorf("Failed to create provider: %v", err)
+		r.logger.Error("Failed to create provider: %v", err)
 		return fmt.Errorf("failed to create provider: %w", err)
 	}
 
-	r.logger.Infof("Created provider %s for user %s", provider.ID, provider.UserID)
+	r.logger.Info("Created provider %s for user %s", provider.ID, provider.UserID)
 	return nil
 }
 
@@ -314,7 +314,7 @@ func (r *Repository) GetProviderByID(id string) (*types.Provider, error) {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("provider not found: %s", id)
 		}
-		r.logger.Errorf("Failed to get provider %s: %v", id, err)
+		r.logger.Error("Failed to get provider %s: %v", id, err)
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
 
@@ -344,7 +344,7 @@ func (r *Repository) GetProviderByUserID(userID string) (*types.Provider, error)
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("provider not found for user: %s", userID)
 		}
-		r.logger.Errorf("Failed to get provider for user %s: %v", userID, err)
+		r.logger.Error("Failed to get provider for user %s: %v", userID, err)
 		return nil, fmt.Errorf("failed to get provider: %w", err)
 	}
 
@@ -376,7 +376,7 @@ func (r *Repository) UpdateProvider(id string, updates map[string]interface{}) e
 
 	result, err := r.db.Exec(query, args...)
 	if err != nil {
-		r.logger.Errorf("Failed to update provider %s: %v", id, err)
+		r.logger.Error("Failed to update provider %s: %v", id, err)
 		return fmt.Errorf("failed to update provider: %w", err)
 	}
 
@@ -389,7 +389,7 @@ func (r *Repository) UpdateProvider(id string, updates map[string]interface{}) e
 		return fmt.Errorf("provider not found: %s", id)
 	}
 
-	r.logger.Infof("Updated provider %s", id)
+	r.logger.Info("Updated provider %s", id)
 	return nil
 }
 
@@ -424,7 +424,7 @@ func (r *Repository) GetProviders(filters map[string]interface{}, limit, offset 
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		r.logger.Errorf("Failed to get providers: %v", err)
+		r.logger.Error("Failed to get providers: %v", err)
 		return nil, fmt.Errorf("failed to get providers: %w", err)
 	}
 	defer rows.Close()
@@ -443,7 +443,7 @@ func (r *Repository) GetProviders(filters map[string]interface{}, limit, offset 
 			&provider.UpdatedAt,
 		)
 		if err != nil {
-			r.logger.Errorf("Failed to scan provider: %v", err)
+			r.logger.Error("Failed to scan provider: %v", err)
 			return nil, fmt.Errorf("failed to scan provider: %w", err)
 		}
 		providers = append(providers, provider)
@@ -471,7 +471,7 @@ func (r *Repository) GetConflictingAppointments(providerID string, timeSlot *typ
 
 	rows, err := r.db.Query(query, providerID, timeSlot.StartTime, timeSlot.EndTime)
 	if err != nil {
-		r.logger.Errorf("Failed to get conflicting appointments: %v", err)
+		r.logger.Error("Failed to get conflicting appointments: %v", err)
 		return nil, fmt.Errorf("failed to get conflicting appointments: %w", err)
 	}
 	defer rows.Close()
@@ -491,7 +491,7 @@ func (r *Repository) GetConflictingAppointments(providerID string, timeSlot *typ
 			&apt.UpdatedAt,
 		)
 		if err != nil {
-			r.logger.Errorf("Failed to scan conflicting appointment: %v", err)
+			r.logger.Error("Failed to scan conflicting appointment: %v", err)
 			return nil, fmt.Errorf("failed to scan conflicting appointment: %w", err)
 		}
 		appointments = append(appointments, apt)
@@ -525,7 +525,7 @@ func (r *Repository) GetProviderSchedule(providerID string, date string) ([]*typ
 
 	rows, err := r.db.Query(query, providerID, startDate, endDate)
 	if err != nil {
-		r.logger.Errorf("Failed to get provider schedule: %v", err)
+		r.logger.Error("Failed to get provider schedule: %v", err)
 		return nil, fmt.Errorf("failed to get provider schedule: %w", err)
 	}
 	defer rows.Close()
@@ -545,7 +545,7 @@ func (r *Repository) GetProviderSchedule(providerID string, date string) ([]*typ
 			&apt.UpdatedAt,
 		)
 		if err != nil {
-			r.logger.Errorf("Failed to scan scheduled appointment: %v", err)
+			r.logger.Error("Failed to scan scheduled appointment: %v", err)
 			return nil, fmt.Errorf("failed to scan scheduled appointment: %w", err)
 		}
 		appointments = append(appointments, apt)

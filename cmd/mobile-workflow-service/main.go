@@ -63,7 +63,7 @@ func main() {
 }
 
 // loggingMiddleware logs HTTP requests
-func loggingMiddleware(logger *logger.Logger) mux.MiddlewareFunc {
+func loggingMiddleware(logger logger.Logger) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger.Info("HTTP Request", map[string]interface{}{

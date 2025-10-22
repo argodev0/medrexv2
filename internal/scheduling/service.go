@@ -17,7 +17,7 @@ import (
 // Service implements the SchedulingService interface
 type Service struct {
 	config              *config.Config
-	logger              *logger.Logger
+	logger              logger.Logger
 	repository          interfaces.SchedulingRepository
 	db                  *database.DB
 	server              *http.Server
@@ -28,11 +28,12 @@ type Service struct {
 }
 
 // New creates a new scheduling service
-func New(cfg *config.Config, log *logger.Logger) interfaces.SchedulingService {
+func New(cfg *config.Config, log logger.Logger) interfaces.SchedulingService {
 	// Initialize database connection
 	db, err := database.NewConnection(&cfg.Database, log)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Error("Failed to connect to database", "error", err)
+		panic(err)
 	}
 
 	// Initialize repository
@@ -62,7 +63,7 @@ func New(cfg *config.Config, log *logger.Logger) interfaces.SchedulingService {
 
 // CreateAppointment creates a new appointment with role validation
 func (s *Service) CreateAppointment(apt *types.Appointment, userID string) (*types.Appointment, error) {
-	s.logger.Infof("Creating appointment for patient %s with provider %s", apt.PatientID, apt.ProviderID)
+	s.logger.Info("Creating appointment for patient %s with provider %s", apt.PatientID, apt.ProviderID)
 
 	// Validate appointment data
 	if err := s.validateAppointment(apt); err != nil {
@@ -99,23 +100,23 @@ func (s *Service) CreateAppointment(apt *types.Appointment, userID string) (*typ
 
 	// Sync to calendar
 	if err := s.calendarManager.SyncAppointmentToCalendar(apt); err != nil {
-		s.logger.Errorf("Failed to sync appointment to calendar: %v", err)
+		s.logger.Error("Failed to sync appointment to calendar: %v", err)
 		// Don't fail the appointment creation if calendar sync fails
 	}
 
 	// Send confirmation notification
 	if err := s.notificationManager.SendAppointmentConfirmation(apt.ID); err != nil {
-		s.logger.Errorf("Failed to send appointment confirmation: %v", err)
+		s.logger.Error("Failed to send appointment confirmation: %v", err)
 		// Don't fail the appointment creation if notification fails
 	}
 
-	s.logger.Infof("Successfully created appointment %s", apt.ID)
+	s.logger.Info("Successfully created appointment %s", apt.ID)
 	return apt, nil
 }
 
 // GetAppointment retrieves an appointment by ID with role validation
 func (s *Service) GetAppointment(aptID, userID string) (*types.Appointment, error) {
-	s.logger.Infof("Getting appointment %s for user %s", aptID, userID)
+	s.logger.Info("Getting appointment %s for user %s", aptID, userID)
 
 	apt, err := s.repository.GetAppointmentByID(aptID)
 	if err != nil {
@@ -130,7 +131,7 @@ func (s *Service) GetAppointment(aptID, userID string) (*types.Appointment, erro
 
 // UpdateAppointment updates an existing appointment with role validation
 func (s *Service) UpdateAppointment(aptID string, updates *types.AppointmentUpdates, userID string) error {
-	s.logger.Infof("Updating appointment %s for user %s", aptID, userID)
+	s.logger.Info("Updating appointment %s for user %s", aptID, userID)
 
 	// Get existing appointment
 	existing, err := s.repository.GetAppointmentByID(aptID)
@@ -180,7 +181,7 @@ func (s *Service) UpdateAppointment(aptID string, updates *types.AppointmentUpda
 	}
 
 	if err := s.notificationManager.SendAppointmentChangeNotification(aptID, changeType); err != nil {
-		s.logger.Errorf("Failed to send appointment change notification: %v", err)
+		s.logger.Error("Failed to send appointment change notification: %v", err)
 	}
 
 	// Update calendar if time changed
@@ -189,13 +190,13 @@ func (s *Service) UpdateAppointment(aptID string, updates *types.AppointmentUpda
 		s.logger.Info("Calendar update needed for appointment time change")
 	}
 
-	s.logger.Infof("Successfully updated appointment %s", aptID)
+	s.logger.Info("Successfully updated appointment %s", aptID)
 	return nil
 }
 
 // CancelAppointment cancels an appointment with role validation
 func (s *Service) CancelAppointment(aptID, userID string) error {
-	s.logger.Infof("Cancelling appointment %s for user %s", aptID, userID)
+	s.logger.Info("Cancelling appointment %s for user %s", aptID, userID)
 
 	// TODO: Add role-based access control validation
 
@@ -208,13 +209,13 @@ func (s *Service) CancelAppointment(aptID, userID string) error {
 		return fmt.Errorf("failed to cancel appointment: %w", err)
 	}
 
-	s.logger.Infof("Successfully cancelled appointment %s", aptID)
+	s.logger.Info("Successfully cancelled appointment %s", aptID)
 	return nil
 }
 
 // GetAppointments retrieves appointments based on filters with role validation
 func (s *Service) GetAppointments(userID string, filters *types.AppointmentFilters) ([]*types.Appointment, error) {
-	s.logger.Infof("Getting appointments for user %s", userID)
+	s.logger.Info("Getting appointments for user %s", userID)
 
 	// TODO: Add role-based filtering based on user permissions
 
@@ -228,7 +229,7 @@ func (s *Service) GetAppointments(userID string, filters *types.AppointmentFilte
 
 // GetPatientAppointments retrieves appointments for a specific patient
 func (s *Service) GetPatientAppointments(patientID, userID string) ([]*types.Appointment, error) {
-	s.logger.Infof("Getting appointments for patient %s requested by user %s", patientID, userID)
+	s.logger.Info("Getting appointments for patient %s requested by user %s", patientID, userID)
 
 	filters := &types.AppointmentFilters{
 		PatientID: patientID,
@@ -239,7 +240,7 @@ func (s *Service) GetPatientAppointments(patientID, userID string) ([]*types.App
 
 // GetProviderAppointments retrieves appointments for a specific provider
 func (s *Service) GetProviderAppointments(providerID, userID string) ([]*types.Appointment, error) {
-	s.logger.Infof("Getting appointments for provider %s requested by user %s", providerID, userID)
+	s.logger.Info("Getting appointments for provider %s requested by user %s", providerID, userID)
 
 	filters := &types.AppointmentFilters{
 		ProviderID: providerID,
@@ -250,7 +251,7 @@ func (s *Service) GetProviderAppointments(providerID, userID string) ([]*types.A
 
 // CheckAvailability checks if a provider is available for a given time slot
 func (s *Service) CheckAvailability(providerID string, timeSlot *types.TimeSlot) (bool, error) {
-	s.logger.Infof("Checking availability for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
+	s.logger.Info("Checking availability for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
 
 	conflicts, err := s.repository.GetConflictingAppointments(providerID, timeSlot)
 	if err != nil {
@@ -258,13 +259,13 @@ func (s *Service) CheckAvailability(providerID string, timeSlot *types.TimeSlot)
 	}
 
 	available := len(conflicts) == 0
-	s.logger.Infof("Provider %s availability: %t", providerID, available)
+	s.logger.Info("Provider %s availability: %t", providerID, available)
 	return available, nil
 }
 
 // GetAvailableSlots returns available time slots for a provider on a given date
 func (s *Service) GetAvailableSlots(providerID string, date string) ([]*types.TimeSlot, error) {
-	s.logger.Infof("Getting available slots for provider %s on %s", providerID, date)
+	s.logger.Info("Getting available slots for provider %s on %s", providerID, date)
 
 	// Get provider's schedule for the day
 	appointments, err := s.repository.GetProviderSchedule(providerID, date)
@@ -306,13 +307,13 @@ func (s *Service) GetAvailableSlots(providerID string, date string) ([]*types.Ti
 		}
 	}
 
-	s.logger.Infof("Found %d available slots for provider %s on %s", len(availableSlots), providerID, date)
+	s.logger.Info("Found %d available slots for provider %s on %s", len(availableSlots), providerID, date)
 	return availableSlots, nil
 }
 
 // BlockTimeSlot blocks a time slot for a provider
 func (s *Service) BlockTimeSlot(providerID string, timeSlot *types.TimeSlot, reason string) error {
-	s.logger.Infof("Blocking time slot for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
+	s.logger.Info("Blocking time slot for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
 
 	// Create a blocked appointment
 	apt := &types.Appointment{
@@ -332,13 +333,13 @@ func (s *Service) BlockTimeSlot(providerID string, timeSlot *types.TimeSlot, rea
 		return fmt.Errorf("failed to block time slot: %w", err)
 	}
 
-	s.logger.Infof("Successfully blocked time slot %s", apt.ID)
+	s.logger.Info("Successfully blocked time slot %s", apt.ID)
 	return nil
 }
 
 // UnblockTimeSlot unblocks a previously blocked time slot
 func (s *Service) UnblockTimeSlot(providerID string, timeSlot *types.TimeSlot) error {
-	s.logger.Infof("Unblocking time slot for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
+	s.logger.Info("Unblocking time slot for provider %s from %v to %v", providerID, timeSlot.StartTime, timeSlot.EndTime)
 
 	// Find blocked appointments in this time slot
 	conflicts, err := s.repository.GetConflictingAppointments(providerID, timeSlot)
@@ -355,13 +356,13 @@ func (s *Service) UnblockTimeSlot(providerID string, timeSlot *types.TimeSlot) e
 		}
 	}
 
-	s.logger.Infof("Successfully unblocked time slot for provider %s", providerID)
+	s.logger.Info("Successfully unblocked time slot for provider %s", providerID)
 	return nil
 }
 
 // CreateProvider creates a new provider
 func (s *Service) CreateProvider(provider *types.Provider, userID string) (*types.Provider, error) {
-	s.logger.Infof("Creating provider for user %s", provider.UserID)
+	s.logger.Info("Creating provider for user %s", provider.UserID)
 
 	// Generate ID and set timestamps
 	provider.ID = uuid.New().String()
@@ -372,13 +373,13 @@ func (s *Service) CreateProvider(provider *types.Provider, userID string) (*type
 		return nil, fmt.Errorf("failed to create provider: %w", err)
 	}
 
-	s.logger.Infof("Successfully created provider %s", provider.ID)
+	s.logger.Info("Successfully created provider %s", provider.ID)
 	return provider, nil
 }
 
 // GetProvider retrieves a provider by ID
 func (s *Service) GetProvider(providerID, userID string) (*types.Provider, error) {
-	s.logger.Infof("Getting provider %s for user %s", providerID, userID)
+	s.logger.Info("Getting provider %s for user %s", providerID, userID)
 
 	provider, err := s.repository.GetProviderByID(providerID)
 	if err != nil {
@@ -390,19 +391,19 @@ func (s *Service) GetProvider(providerID, userID string) (*types.Provider, error
 
 // UpdateProvider updates an existing provider
 func (s *Service) UpdateProvider(providerID string, updates map[string]interface{}, userID string) error {
-	s.logger.Infof("Updating provider %s for user %s", providerID, userID)
+	s.logger.Info("Updating provider %s for user %s", providerID, userID)
 
 	if err := s.repository.UpdateProvider(providerID, updates); err != nil {
 		return fmt.Errorf("failed to update provider: %w", err)
 	}
 
-	s.logger.Infof("Successfully updated provider %s", providerID)
+	s.logger.Info("Successfully updated provider %s", providerID)
 	return nil
 }
 
 // GetProviders retrieves providers based on filters
 func (s *Service) GetProviders(filters map[string]interface{}, userID string) ([]*types.Provider, error) {
-	s.logger.Infof("Getting providers for user %s", userID)
+	s.logger.Info("Getting providers for user %s", userID)
 
 	providers, err := s.repository.GetProviders(filters, 100, 0) // Default limit
 	if err != nil {
@@ -437,7 +438,7 @@ func (s *Service) Start(addr string) error {
 		Handler: router,
 	}
 
-	s.logger.Infof("Starting Scheduling Service on %s", addr)
+	s.logger.Info("Starting Scheduling Service on %s", addr)
 	return s.server.ListenAndServe()
 }
 

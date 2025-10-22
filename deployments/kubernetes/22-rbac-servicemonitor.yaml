@@ -1,0 +1,124 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rbac-system-metrics
+  namespace: medrex-services
+  labels:
+    app: rbac-system
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      component: rbac-system
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - medrex-services
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rbac-core-engine-metrics
+  namespace: medrex-services
+  labels:
+    app: rbac-core-engine
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: rbac-core-engine
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scheme: http
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'rbac_.*'
+      targetLabel: service
+      replacement: 'rbac-core-engine'
+  namespaceSelector:
+    matchNames:
+    - medrex-services
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: abac-engine-metrics
+  namespace: medrex-services
+  labels:
+    app: abac-engine
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: abac-engine
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scheme: http
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'abac_.*'
+      targetLabel: service
+      replacement: 'abac-engine'
+  namespaceSelector:
+    matchNames:
+    - medrex-services
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sbe-policy-manager-metrics
+  namespace: medrex-services
+  labels:
+    app: sbe-policy-manager
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: sbe-policy-manager
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scheme: http
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'sbe_.*'
+      targetLabel: service
+      replacement: 'sbe-policy-manager'
+  namespaceSelector:
+    matchNames:
+    - medrex-services
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: certificate-manager-metrics
+  namespace: medrex-services
+  labels:
+    app: certificate-manager
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: certificate-manager
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'certificate_.*'
+      targetLabel: service
+      replacement: 'certificate-manager'
+  namespaceSelector:
+    matchNames:
+    - medrex-services

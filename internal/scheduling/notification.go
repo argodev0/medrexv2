@@ -11,11 +11,11 @@ import (
 
 // NotificationService implements notification functionality for appointments
 type NotificationService struct {
-	logger *logger.Logger
+	logger logger.Logger
 }
 
 // NewNotificationService creates a new notification service
-func NewNotificationService(log *logger.Logger) interfaces.NotificationService {
+func NewNotificationService(log logger.Logger) interfaces.NotificationService {
 	return &NotificationService{
 		logger: log,
 	}
@@ -23,57 +23,57 @@ func NewNotificationService(log *logger.Logger) interfaces.NotificationService {
 
 // SendEmail sends an email notification
 func (n *NotificationService) SendEmail(to, subject, body string) error {
-	n.logger.Infof("Sending email to %s with subject: %s", to, subject)
+	n.logger.Info("Sending email to %s with subject: %s", to, subject)
 	
 	// TODO: Integrate with actual email service (SendGrid, AWS SES, etc.)
 	// For now, just log the email
-	n.logger.Infof("Email sent successfully to %s", to)
+	n.logger.Info("Email sent successfully to %s", to)
 	return nil
 }
 
 // SendEmailTemplate sends an email using a template
 func (n *NotificationService) SendEmailTemplate(to, template string, data map[string]interface{}) error {
-	n.logger.Infof("Sending templated email to %s using template: %s", to, template)
+	n.logger.Info("Sending templated email to %s using template: %s", to, template)
 	
 	// TODO: Implement template rendering and email sending
 	// For now, just log the template email
-	n.logger.Infof("Templated email sent successfully to %s", to)
+	n.logger.Info("Templated email sent successfully to %s", to)
 	return nil
 }
 
 // SendSMS sends an SMS notification
 func (n *NotificationService) SendSMS(to, message string) error {
-	n.logger.Infof("Sending SMS to %s: %s", to, message)
+	n.logger.Info("Sending SMS to %s: %s", to, message)
 	
 	// TODO: Integrate with SMS service (Twilio, AWS SNS, etc.)
 	// For now, just log the SMS
-	n.logger.Infof("SMS sent successfully to %s", to)
+	n.logger.Info("SMS sent successfully to %s", to)
 	return nil
 }
 
 // SendSMSTemplate sends an SMS using a template
 func (n *NotificationService) SendSMSTemplate(to, template string, data map[string]interface{}) error {
-	n.logger.Infof("Sending templated SMS to %s using template: %s", to, template)
+	n.logger.Info("Sending templated SMS to %s using template: %s", to, template)
 	
 	// TODO: Implement template rendering and SMS sending
 	// For now, just log the template SMS
-	n.logger.Infof("Templated SMS sent successfully to %s", to)
+	n.logger.Info("Templated SMS sent successfully to %s", to)
 	return nil
 }
 
 // SendPushNotification sends a push notification
 func (n *NotificationService) SendPushNotification(userID, title, message string) error {
-	n.logger.Infof("Sending push notification to user %s: %s - %s", userID, title, message)
+	n.logger.Info("Sending push notification to user %s: %s - %s", userID, title, message)
 	
 	// TODO: Integrate with push notification service (Firebase, AWS SNS, etc.)
 	// For now, just log the push notification
-	n.logger.Infof("Push notification sent successfully to user %s", userID)
+	n.logger.Info("Push notification sent successfully to user %s", userID)
 	return nil
 }
 
 // GetUserPreferences retrieves user notification preferences
 func (n *NotificationService) GetUserPreferences(userID string) (map[string]bool, error) {
-	n.logger.Infof("Getting notification preferences for user %s", userID)
+	n.logger.Info("Getting notification preferences for user %s", userID)
 	
 	// TODO: Implement database lookup for user preferences
 	// For now, return default preferences
@@ -90,11 +90,11 @@ func (n *NotificationService) GetUserPreferences(userID string) (map[string]bool
 
 // UpdateUserPreferences updates user notification preferences
 func (n *NotificationService) UpdateUserPreferences(userID string, preferences map[string]bool) error {
-	n.logger.Infof("Updating notification preferences for user %s", userID)
+	n.logger.Info("Updating notification preferences for user %s", userID)
 	
 	// TODO: Implement database update for user preferences
 	// For now, just log the update
-	n.logger.Infof("Notification preferences updated successfully for user %s", userID)
+	n.logger.Info("Notification preferences updated successfully for user %s", userID)
 	return nil
 }
 
@@ -102,14 +102,14 @@ func (n *NotificationService) UpdateUserPreferences(userID string, preferences m
 type AppointmentNotificationManager struct {
 	notificationService interfaces.NotificationService
 	schedulingRepo      interfaces.SchedulingRepository
-	logger              *logger.Logger
+	logger              logger.Logger
 }
 
 // NewAppointmentNotificationManager creates a new appointment notification manager
 func NewAppointmentNotificationManager(
 	notificationService interfaces.NotificationService,
 	schedulingRepo interfaces.SchedulingRepository,
-	log *logger.Logger,
+	log logger.Logger,
 ) *AppointmentNotificationManager {
 	return &AppointmentNotificationManager{
 		notificationService: notificationService,
@@ -120,7 +120,7 @@ func NewAppointmentNotificationManager(
 
 // SendAppointmentReminder sends a reminder for an upcoming appointment
 func (anm *AppointmentNotificationManager) SendAppointmentReminder(aptID string) error {
-	anm.logger.Infof("Sending appointment reminder for %s", aptID)
+	anm.logger.Info("Sending appointment reminder for %s", aptID)
 	
 	// Get appointment details
 	apt, err := anm.schedulingRepo.GetAppointmentByID(aptID)
@@ -152,7 +152,7 @@ func (anm *AppointmentNotificationManager) SendAppointmentReminder(aptID string)
 	patientEmail := "patient@example.com"
 	
 	if err := anm.notificationService.SendEmail(patientEmail, subject, body); err != nil {
-		anm.logger.Errorf("Failed to send email reminder: %v", err)
+		anm.logger.Error("Failed to send email reminder: %v", err)
 	}
 	
 	// Push notification
@@ -160,16 +160,16 @@ func (anm *AppointmentNotificationManager) SendAppointmentReminder(aptID string)
 	message := fmt.Sprintf("Your appointment is in %s", anm.formatDuration(timeUntil))
 	
 	if err := anm.notificationService.SendPushNotification(apt.PatientID, title, message); err != nil {
-		anm.logger.Errorf("Failed to send push notification reminder: %v", err)
+		anm.logger.Error("Failed to send push notification reminder: %v", err)
 	}
 	
-	anm.logger.Infof("Appointment reminder sent successfully for %s", aptID)
+	anm.logger.Info("Appointment reminder sent successfully for %s", aptID)
 	return nil
 }
 
 // SendAppointmentConfirmation sends a confirmation for a new or updated appointment
 func (anm *AppointmentNotificationManager) SendAppointmentConfirmation(aptID string) error {
-	anm.logger.Infof("Sending appointment confirmation for %s", aptID)
+	anm.logger.Info("Sending appointment confirmation for %s", aptID)
 	
 	// Get appointment details
 	apt, err := anm.schedulingRepo.GetAppointmentByID(aptID)
@@ -193,7 +193,7 @@ func (anm *AppointmentNotificationManager) SendAppointmentConfirmation(aptID str
 	patientEmail := "patient@example.com"
 	
 	if err := anm.notificationService.SendEmail(patientEmail, subject, body); err != nil {
-		anm.logger.Errorf("Failed to send email confirmation: %v", err)
+		anm.logger.Error("Failed to send email confirmation: %v", err)
 	}
 	
 	// Push notification
@@ -203,16 +203,16 @@ func (anm *AppointmentNotificationManager) SendAppointmentConfirmation(aptID str
 		apt.StartTime.Format("3:04 PM"))
 	
 	if err := anm.notificationService.SendPushNotification(apt.PatientID, title, message); err != nil {
-		anm.logger.Errorf("Failed to send push notification confirmation: %v", err)
+		anm.logger.Error("Failed to send push notification confirmation: %v", err)
 	}
 	
-	anm.logger.Infof("Appointment confirmation sent successfully for %s", aptID)
+	anm.logger.Info("Appointment confirmation sent successfully for %s", aptID)
 	return nil
 }
 
 // SendAppointmentChangeNotification sends a notification about appointment changes
 func (anm *AppointmentNotificationManager) SendAppointmentChangeNotification(aptID string, changeType string) error {
-	anm.logger.Infof("Sending appointment change notification for %s (type: %s)", aptID, changeType)
+	anm.logger.Info("Sending appointment change notification for %s (type: %s)", aptID, changeType)
 	
 	// Get appointment details
 	apt, err := anm.schedulingRepo.GetAppointmentByID(aptID)
@@ -269,20 +269,20 @@ func (anm *AppointmentNotificationManager) SendAppointmentChangeNotification(apt
 	patientEmail := "patient@example.com"
 	
 	if err := anm.notificationService.SendEmail(patientEmail, subject, body); err != nil {
-		anm.logger.Errorf("Failed to send email change notification: %v", err)
+		anm.logger.Error("Failed to send email change notification: %v", err)
 	}
 	
 	if err := anm.notificationService.SendPushNotification(apt.PatientID, pushTitle, pushMessage); err != nil {
-		anm.logger.Errorf("Failed to send push notification change: %v", err)
+		anm.logger.Error("Failed to send push notification change: %v", err)
 	}
 	
-	anm.logger.Infof("Appointment change notification sent successfully for %s", aptID)
+	anm.logger.Info("Appointment change notification sent successfully for %s", aptID)
 	return nil
 }
 
 // SendConflictAlert sends an alert about scheduling conflicts
 func (anm *AppointmentNotificationManager) SendConflictAlert(providerID string, conflictingApts []*types.Appointment) error {
-	anm.logger.Infof("Sending conflict alert for provider %s", providerID)
+	anm.logger.Info("Sending conflict alert for provider %s", providerID)
 	
 	if len(conflictingApts) == 0 {
 		return nil
@@ -306,7 +306,7 @@ func (anm *AppointmentNotificationManager) SendConflictAlert(providerID string, 
 	body += "\nPlease review and resolve these conflicts."
 	
 	if err := anm.notificationService.SendEmail(providerEmail, subject, body); err != nil {
-		anm.logger.Errorf("Failed to send conflict alert email: %v", err)
+		anm.logger.Error("Failed to send conflict alert email: %v", err)
 		return err
 	}
 	
@@ -315,10 +315,10 @@ func (anm *AppointmentNotificationManager) SendConflictAlert(providerID string, 
 	message := fmt.Sprintf("You have %d conflicting appointments that need attention", len(conflictingApts))
 	
 	if err := anm.notificationService.SendPushNotification(providerID, title, message); err != nil {
-		anm.logger.Errorf("Failed to send conflict alert push notification: %v", err)
+		anm.logger.Error("Failed to send conflict alert push notification: %v", err)
 	}
 	
-	anm.logger.Infof("Conflict alert sent successfully for provider %s", providerID)
+	anm.logger.Info("Conflict alert sent successfully for provider %s", providerID)
 	return nil
 }
 
@@ -344,12 +344,12 @@ func (anm *AppointmentNotificationManager) ScheduleReminders() error {
 		timeUntil := time.Until(apt.StartTime)
 		if timeUntil > 23*time.Hour && timeUntil < 25*time.Hour {
 			if err := anm.SendAppointmentReminder(apt.ID); err != nil {
-				anm.logger.Errorf("Failed to send reminder for appointment %s: %v", apt.ID, err)
+				anm.logger.Error("Failed to send reminder for appointment %s: %v", apt.ID, err)
 			}
 		}
 	}
 	
-	anm.logger.Infof("Processed reminders for %d appointments", len(appointments))
+	anm.logger.Info("Processed reminders for %d appointments", len(appointments))
 	return nil
 }
 

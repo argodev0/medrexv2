@@ -75,8 +75,8 @@ func (s *Service) loggingMiddleware(next http.Handler) http.Handler {
 // authMiddleware validates JWT tokens
 func (s *Service) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip authentication for health checks and admin endpoints
-		if r.URL.Path == "/health" || strings.HasPrefix(r.URL.Path, "/admin/") {
+		// Skip authentication for health checks, admin endpoints, and landing page
+		if r.URL.Path == "/" || r.URL.Path == "/health" || r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/admin/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -137,6 +137,28 @@ func (s *Service) rateLimitMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+// metricsMiddleware collects metrics for requests
+func (s *Service) metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Create a response recorder to capture status code
+		recorder := &responseRecorder{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
+		next.ServeHTTP(recorder, r)
+
+		duration := time.Since(start)
+
+		// Collect metrics
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordRequest(r.Method, r.URL.Path, recorder.statusCode, duration)
+		}
 	})
 }
 
