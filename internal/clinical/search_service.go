@@ -1,7 +1,6 @@
 package clinical
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -14,11 +13,11 @@ import (
 type SearchService struct {
 	clinicalService  *ClinicalNotesService
 	blockchainClient *BlockchainClient
-	logger           *logger.Logger
+	logger           logger.Logger
 }
 
 // NewSearchService creates a new search service
-func NewSearchService(clinicalService *ClinicalNotesService, blockchainClient *BlockchainClient, logger *logger.Logger) *SearchService {
+func NewSearchService(clinicalService *ClinicalNotesService, blockchainClient *BlockchainClient, logger logger.Logger) *SearchService {
 	return &SearchService{
 		clinicalService:  clinicalService,
 		blockchainClient: blockchainClient,

@@ -12,11 +12,11 @@ import (
 // DatabaseKeyStore implements KeyStore using PostgreSQL
 type DatabaseKeyStore struct {
 	db     *sql.DB
-	logger *logger.Logger
+	logger logger.Logger
 }
 
 // NewDatabaseKeyStore creates a new database-backed key store
-func NewDatabaseKeyStore(db *sql.DB, logger *logger.Logger) *DatabaseKeyStore {
+func NewDatabaseKeyStore(db *sql.DB, logger logger.Logger) *DatabaseKeyStore {
 	return &DatabaseKeyStore{
 		db:     db,
 		logger: logger,

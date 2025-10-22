@@ -232,10 +232,26 @@ func overrideWithEnv(config *Config) {
 		}
 	}
 
-	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
-		// Parse DATABASE_URL if provided
-		// Format: postgres://user:password@host:port/dbname?sslmode=require
-		// This is a simplified parser - in production, use a proper URL parser
+	// Database configuration
+	if dbHost := os.Getenv("DATABASE_HOST"); dbHost != "" {
+		config.Database.Host = dbHost
+	}
+	if dbPort := os.Getenv("DATABASE_PORT"); dbPort != "" {
+		if p, err := strconv.Atoi(dbPort); err == nil {
+			config.Database.Port = p
+		}
+	}
+	if dbName := os.Getenv("DATABASE_NAME"); dbName != "" {
+		config.Database.Name = dbName
+	}
+	if dbUser := os.Getenv("DATABASE_USERNAME"); dbUser != "" {
+		config.Database.User = dbUser
+	}
+	if dbPassword := os.Getenv("DATABASE_PASSWORD"); dbPassword != "" {
+		config.Database.Password = dbPassword
+	}
+	if dbSSLMode := os.Getenv("DATABASE_SSL_MODE"); dbSSLMode != "" {
+		config.Database.SSLMode = dbSSLMode
 	}
 
 	if jwtSecret := os.Getenv("JWT_SECRET_KEY"); jwtSecret != "" {

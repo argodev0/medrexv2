@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,37 +23,42 @@ import (
 
 func main() {
 	// Initialize logger
-	log := logger.New("clinical-notes-service", "info")
+	log := logger.New("info")
 	log.Info("Starting Clinical Notes Service")
 
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Failed to load configuration", "error", err)
+		fmt.Printf("Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Initialize database connection
-	db, err := database.NewConnection(&cfg.Database)
+	db, err := database.NewConnection(&cfg.Database, log)
 	if err != nil {
-		log.Fatal("Failed to connect to database", "error", err)
+		log.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	// Test database connection
 	if err := db.Ping(); err != nil {
-		log.Fatal("Failed to ping database", "error", err)
+		log.Error("Failed to ping database", "error", err)
+		os.Exit(1)
 	}
 	log.Info("Database connection established")
 
 	// Initialize encryption service
 	encryptionKey := os.Getenv("ENCRYPTION_KEY")
 	if encryptionKey == "" {
-		log.Fatal("ENCRYPTION_KEY environment variable is required")
+		log.Error("ENCRYPTION_KEY environment variable is required")
+		os.Exit(1)
 	}
 
 	aesEncryption, err := encryption.NewAESEncryption(encryptionKey)
 	if err != nil {
-		log.Fatal("Failed to initialize AES encryption", "error", err)
+		log.Error("Failed to initialize AES encryption", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize PRE service (mock HSM and KeyStore for development)
@@ -62,8 +67,8 @@ func main() {
 	preService := encryption.NewPREService(mockHSM, mockKeyStore)
 
 	// Initialize repositories
-	clinicalRepo := repository.NewClinicalNotesRepository(db, aesEncryption, log)
-	patientRepo := repository.NewPatientRepository(db, aesEncryption, log)
+	clinicalRepo := repository.NewClinicalNotesRepository(db.DB, aesEncryption, log)
+	patientRepo := repository.NewPatientRepository(db.DB, aesEncryption, log)
 
 	// Initialize blockchain client
 	blockchainClient := clinical.NewBlockchainClient(&cfg.Fabric, log)

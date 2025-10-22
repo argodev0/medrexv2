@@ -16,7 +16,7 @@ import (
 // HSMClientImpl implements the HSMClient interface
 type HSMClientImpl struct {
 	config *config.HSMConfig
-	logger *logger.Logger
+	logger logger.Logger
 	// In production, this would contain actual HSM SDK clients
 	// For now, we'll simulate HSM operations
 	keys map[string]*HSMKeyData
@@ -32,7 +32,7 @@ type HSMKeyData struct {
 }
 
 // NewHSMClient creates a new HSM client
-func NewHSMClient(config *config.HSMConfig, logger *logger.Logger) (*HSMClientImpl, error) {
+func NewHSMClient(config *config.HSMConfig, logger logger.Logger) (*HSMClientImpl, error) {
 	client := &HSMClientImpl{
 		config: config,
 		logger: logger,

@@ -30,19 +30,15 @@ func main() {
 	log.Info("Starting IAM Service", "version", "1.0.0")
 
 	// Initialize database connection
-	db, err := database.New(cfg.Database, log)
+	db, err := database.NewConnection(&cfg.Database, log)
 	if err != nil {
 		log.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	// Create database schema
-	ctx := context.Background()
-	if err := db.CreateSchema(ctx); err != nil {
-		log.Error("Failed to create database schema", "error", err)
-		os.Exit(1)
-	}
+	// Database schema is already created by init scripts
+	log.Info("Database schema already initialized")
 
 	// Initialize IAM components
 	passwordManager := iam.NewPasswordManager()

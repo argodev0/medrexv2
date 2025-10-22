@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/medrex/dlt-emr/internal/iam"
 	"github.com/medrex/dlt-emr/pkg/encryption"
 	"github.com/medrex/dlt-emr/pkg/interfaces"
 	"github.com/medrex/dlt-emr/pkg/logger"
@@ -20,7 +19,7 @@ type ClinicalNotesService struct {
 	encryptionSvc   interfaces.EncryptionService
 	blockchainClient interfaces.BlockchainClient
 	preService      *encryption.PREService
-	logger          *logger.Logger
+	logger          logger.Logger
 }
 
 // NewClinicalNotesService creates a new clinical notes service
@@ -30,7 +29,7 @@ func NewClinicalNotesService(
 	encSvc interfaces.EncryptionService,
 	bcClient interfaces.BlockchainClient,
 	preService *encryption.PREService,
-	logger *logger.Logger,
+	logger logger.Logger,
 ) *ClinicalNotesService {
 	return &ClinicalNotesService{
 		repository:      repo,

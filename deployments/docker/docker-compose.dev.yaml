@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_DB: medrex_emr
       POSTGRES_USER: medrex_user
-      POSTGRES_PASSWORD: medrex_dev_password
+      POSTGRES_PASSWORD: dbpass1
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -224,14 +224,16 @@ services:
     container_name: iam-service
     environment:
       - PORT=8080
-      - DATABASE_HOST=postgres
+      - DATABASE_HOST=medrex-postgres
       - DATABASE_PORT=5432
       - DATABASE_NAME=medrex_emr
       - DATABASE_USERNAME=medrex_user
-      - DATABASE_PASSWORD=medrex_dev_password
+      - DATABASE_PASSWORD=dbpass1
+      - DATABASE_SSL_MODE=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - ENCRYPTION_KEY=dev-encryption-key-32-chars-long
       - FABRIC_NETWORK_CONFIG_PATH=/app/config/fabric-network.yaml
       - LOG_LEVEL=debug
       - ENVIRONMENT=development
@@ -261,11 +263,19 @@ services:
     container_name: api-gateway
     environment:
       - PORT=8000
+      - GATEWAY_PORT=8000
+      - DATABASE_HOST=medrex-postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=medrex_emr
+      - DATABASE_USERNAME=medrex_user
+      - DATABASE_PASSWORD=dbpass1
+      - DATABASE_SSL_MODE=disable
       - IAM_SERVICE_URL=http://iam-service:8080
       - CLINICAL_NOTES_SERVICE_URL=http://clinical-notes-service:8081
       - SCHEDULING_SERVICE_URL=http://scheduling-service:8082
       - MOBILE_WORKFLOW_SERVICE_URL=http://mobile-workflow-service:8083
       - JWT_SECRET_KEY=dev-jwt-secret-key-change-in-production
+      - ENCRYPTION_KEY=dev-encryption-key-32-chars-long
       - LOG_LEVEL=debug
       - ENVIRONMENT=development
       - RATE_LIMIT_REQUESTS_PER_MINUTE=1000

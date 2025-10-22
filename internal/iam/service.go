@@ -498,3 +498,15 @@ func (s *Service) generateRefreshToken(user *types.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.config.JWT.SecretKey))
 }
+
+// Start starts the IAM service (required by interface)
+func (s *Service) Start(addr string) error {
+	s.logger.Info("IAM service started", "address", addr)
+	return nil
+}
+
+// Stop stops the IAM service (required by interface)
+func (s *Service) Stop() error {
+	s.logger.Info("IAM service stopped")
+	return nil
+}

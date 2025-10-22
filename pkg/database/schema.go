@@ -171,7 +171,7 @@ const (
 			username VARCHAR(100) UNIQUE NOT NULL,
 			encrypted_email BYTEA NOT NULL,
 			role VARCHAR(50) NOT NULL,
-			organization_id VARCHAR(100) NOT NULL,
+			organization VARCHAR(100) NOT NULL,
 			fabric_cert_id VARCHAR(200),
 			encrypted_personal_info BYTEA,
 			encryption_key_id UUID NOT NULL,
@@ -235,6 +235,6 @@ const (
 	createUsersIndexes = `
 		CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 		CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-		CREATE INDEX IF NOT EXISTS idx_users_organization_id ON users(organization_id);
-		CREATE INDEX IF NOT EXISTS idx_users_fabric_cert_id ON users(fabric_cert_id);`
+		CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization);
+`
 )

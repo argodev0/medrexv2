@@ -15,11 +15,11 @@ import (
 type DB struct {
 	*sql.DB
 	config *config.DatabaseConfig
-	logger *logger.Logger
+	logger logger.Logger
 }
 
 // NewConnection creates a new database connection with encryption support
-func NewConnection(cfg *config.DatabaseConfig, log *logger.Logger) (*DB, error) {
+func NewConnection(cfg *config.DatabaseConfig, log logger.Logger) (*DB, error) {
 	// Build connection string with encryption parameters
 	connStr := buildConnectionString(cfg)
 	

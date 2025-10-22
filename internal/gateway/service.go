@@ -23,7 +23,7 @@ type Service struct {
 	tokenValidator   interfaces.TokenValidator
 	services         map[string]*url.URL
 	servicesMux      sync.RWMutex
-	logger           *logger.Logger
+	logger           logger.Logger
 	jwtSecret        []byte
 	metricsCollector *MetricsCollector
 	startTime        time.Time
@@ -40,7 +40,7 @@ type Config struct {
 }
 
 // NewService creates a new API Gateway service
-func NewService(config *Config, rateLimiter interfaces.RateLimiter, logger *logger.Logger) *Service {
+func NewService(config *Config, rateLimiter interfaces.RateLimiter, logger logger.Logger) *Service {
 	s := &Service{
 		router:           mux.NewRouter(),
 		rateLimiter:      rateLimiter,

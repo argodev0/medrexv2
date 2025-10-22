@@ -2,7 +2,6 @@ package clinical
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,11 +15,11 @@ import (
 // Handlers handles HTTP requests for clinical notes service
 type Handlers struct {
 	service *ClinicalNotesService
-	logger  *logger.Logger
+	logger  logger.Logger
 }
 
 // NewHandlers creates new HTTP handlers
-func NewHandlers(service *ClinicalNotesService, logger *logger.Logger) *Handlers {
+func NewHandlers(service *ClinicalNotesService, logger logger.Logger) *Handlers {
 	return &Handlers{
 		service: service,
 		logger:  logger,

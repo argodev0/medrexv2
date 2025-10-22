@@ -17,11 +17,11 @@ import (
 type ClinicalNotesRepository struct {
 	db        *sql.DB
 	encryptor *encryption.AESEncryption
-	logger    *logger.Logger
+	logger    logger.Logger
 }
 
 // NewClinicalNotesRepository creates a new clinical notes repository
-func NewClinicalNotesRepository(db *sql.DB, encryptor *encryption.AESEncryption, logger *logger.Logger) *ClinicalNotesRepository {
+func NewClinicalNotesRepository(db *sql.DB, encryptor *encryption.AESEncryption, logger logger.Logger) *ClinicalNotesRepository {
 	return &ClinicalNotesRepository{
 		db:        db,
 		encryptor: encryptor,

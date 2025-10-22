@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lib/pq"
 
 	"github.com/medrex/dlt-emr/pkg/database"
@@ -31,27 +30,21 @@ func NewUserRepository(db *database.DB, log logger.Logger) *UserRepository {
 // Create creates a new user in the database
 func (r *UserRepository) Create(user *types.User) error {
 	query := `
-		INSERT INTO users (id, username, encrypted_email, role, organization_id, 
-			fabric_cert_id, is_active, created_at, updated_at, encryption_key_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+		INSERT INTO users (id, username, email, role, organization, 
+			is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
-	// Generate encryption key ID for user data
-	encryptionKeyID := uuid.New().String()
-
-	// In a real implementation, email would be encrypted before storage
-	encryptedEmail := []byte(user.Email) // Placeholder - should be encrypted
+	// For development, we'll store email in plain text
 
 	_, err := r.db.Exec(query,
 		user.ID,
 		user.Username,
-		encryptedEmail,
+		user.Email,
 		user.Role,
 		user.Organization,
-		user.Certificate,
 		user.IsActive,
 		user.CreatedAt,
 		user.UpdatedAt,
-		encryptionKeyID,
 	)
 
 	if err != nil {
@@ -82,26 +75,22 @@ func (r *UserRepository) Create(user *types.User) error {
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(id string) (*types.User, error) {
 	query := `
-		SELECT id, username, encrypted_email, role, organization_id, 
-			fabric_cert_id, is_active, created_at, updated_at, last_login
+		SELECT id, username, email, role, organization, 
+			is_active, created_at, updated_at
 		FROM users 
 		WHERE id = $1`
 
 	var user types.User
-	var encryptedEmail []byte
-	var lastLogin sql.NullTime
 
 	err := r.db.QueryRow(query, id).Scan(
 		&user.ID,
 		&user.Username,
-		&encryptedEmail,
+		&user.Email,
 		&user.Role,
 		&user.Organization,
-		&user.Certificate,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&lastLogin,
 	)
 
 	if err != nil {
@@ -115,35 +104,28 @@ func (r *UserRepository) GetByID(id string) (*types.User, error) {
 		return nil, fmt.Errorf("failed to get user by ID: %w", err)
 	}
 
-	// Decrypt email (placeholder - should use proper decryption)
-	user.Email = string(encryptedEmail)
-
 	return &user, nil
 }
 
 // GetByUsername retrieves a user by username
 func (r *UserRepository) GetByUsername(username string) (*types.User, error) {
 	query := `
-		SELECT id, username, encrypted_email, role, organization_id, 
-			fabric_cert_id, is_active, created_at, updated_at, last_login
+		SELECT id, username, email, role, organization, 
+			is_active, created_at, updated_at
 		FROM users 
 		WHERE username = $1`
 
 	var user types.User
-	var encryptedEmail []byte
-	var lastLogin sql.NullTime
 
 	err := r.db.QueryRow(query, username).Scan(
 		&user.ID,
 		&user.Username,
-		&encryptedEmail,
+		&user.Email,
 		&user.Role,
 		&user.Organization,
-		&user.Certificate,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&lastLogin,
 	)
 
 	if err != nil {
@@ -157,40 +139,28 @@ func (r *UserRepository) GetByUsername(username string) (*types.User, error) {
 		return nil, fmt.Errorf("failed to get user by username: %w", err)
 	}
 
-	// Decrypt email (placeholder - should use proper decryption)
-	user.Email = string(encryptedEmail)
-
 	return &user, nil
 }
 
 // GetByEmail retrieves a user by email
 func (r *UserRepository) GetByEmail(email string) (*types.User, error) {
-	// In a real implementation, this would need to handle encrypted email search
-	// For now, we'll use a simple approach
 	query := `
-		SELECT id, username, encrypted_email, role, organization_id, 
-			fabric_cert_id, is_active, created_at, updated_at, last_login
+		SELECT id, username, email, role, organization, 
+			is_active, created_at, updated_at
 		FROM users 
-		WHERE encrypted_email = $1`
-
-	// Placeholder encryption - should use proper encryption
-	encryptedEmailSearch := []byte(email)
+		WHERE email = $1`
 
 	var user types.User
-	var encryptedEmail []byte
-	var lastLogin sql.NullTime
 
-	err := r.db.QueryRow(query, encryptedEmailSearch).Scan(
+	err := r.db.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Username,
-		&encryptedEmail,
+		&user.Email,
 		&user.Role,
 		&user.Organization,
-		&user.Certificate,
 		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
-		&lastLogin,
 	)
 
 	if err != nil {
@@ -203,9 +173,6 @@ func (r *UserRepository) GetByEmail(email string) (*types.User, error) {
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
-
-	// Decrypt email (placeholder - should use proper decryption)
-	user.Email = string(encryptedEmail)
 
 	return &user, nil
 }
@@ -279,8 +246,8 @@ func (r *UserRepository) Delete(id string) error {
 // List retrieves users with filtering and pagination
 func (r *UserRepository) List(filters map[string]interface{}, limit, offset int) ([]*types.User, error) {
 	baseQuery := `
-		SELECT id, username, encrypted_email, role, organization_id, 
-			fabric_cert_id, is_active, created_at, updated_at, last_login
+		SELECT id, username, email, role, organization, 
+			is_active, created_at, updated_at
 		FROM users`
 
 	whereParts := make([]string, 0)
@@ -290,7 +257,7 @@ func (r *UserRepository) List(filters map[string]interface{}, limit, offset int)
 	// Build WHERE clause from filters
 	for field, value := range filters {
 		switch field {
-		case "role", "organization_id", "is_active":
+		case "role", "organization", "is_active":
 			whereParts = append(whereParts, fmt.Sprintf("%s = $%d", field, argIndex))
 			args = append(args, value)
 			argIndex++
@@ -328,27 +295,20 @@ func (r *UserRepository) List(filters map[string]interface{}, limit, offset int)
 	var users []*types.User
 	for rows.Next() {
 		var user types.User
-		var encryptedEmail []byte
-		var lastLogin sql.NullTime
 
 		err := rows.Scan(
 			&user.ID,
 			&user.Username,
-			&encryptedEmail,
+			&user.Email,
 			&user.Role,
 			&user.Organization,
-			&user.Certificate,
 			&user.IsActive,
 			&user.CreatedAt,
 			&user.UpdatedAt,
-			&lastLogin,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user row: %w", err)
 		}
-
-		// Decrypt email (placeholder - should use proper decryption)
-		user.Email = string(encryptedEmail)
 
 		users = append(users, &user)
 	}

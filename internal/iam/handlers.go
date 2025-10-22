@@ -269,7 +269,7 @@ func (h *Handlers) ListUsers(c *gin.Context) {
 		filters["role"] = role
 	}
 	if org := c.Query("organization"); org != "" {
-		filters["organization_id"] = org
+		filters["organization"] = org
 	}
 	if username := c.Query("username"); username != "" {
 		filters["username"] = username

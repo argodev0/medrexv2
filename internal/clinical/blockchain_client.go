@@ -14,14 +14,14 @@ import (
 // BlockchainClient implements blockchain operations for clinical notes
 type BlockchainClient struct {
 	config     *config.FabricConfig
-	logger     *logger.Logger
+	logger     logger.Logger
 	channelID  string
 	accessPolicyCC string
 	auditLogCC     string
 }
 
 // NewBlockchainClient creates a new blockchain client for clinical operations
-func NewBlockchainClient(cfg *config.FabricConfig, log *logger.Logger) *BlockchainClient {
+func NewBlockchainClient(cfg *config.FabricConfig, log logger.Logger) *BlockchainClient {
 	return &BlockchainClient{
 		config:         cfg,
 		logger:         log,
